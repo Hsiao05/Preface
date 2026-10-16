@@ -1,0 +1,69 @@
+# electron-builder 打包配置
+#
+# 生成 Windows 的 NSIS 安装包。
+# 用法：npm run package
+
+appId: com.preface.app
+productName: 序 · Preface
+
+# 版本号和描述从 package.json 读
+directories:
+  # 打包产物放这里
+  output: dist
+  # 打包时用到的额外资源（图标等）
+  buildResources: resources
+
+# 要打进安装包的文件。
+# out/ 是 electron-vite 的构建产物（主进程、预加载、界面）。
+files:
+  - out/**/*
+  - package.json
+  # 明确排除这些（保险起见，正常也不会被打进去）
+  - '!**/*.map'
+  - '!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}/**'
+  - '!**/node_modules/.bin'
+
+# 额外的资源文件：托盘图标和窗口图标。
+# 打包后会被放到 resources/ 目录下，主进程用 process.resourcesPath 读。
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/tray.png
+    to: tray.png
+
+# 界面进程不需要 node_modules（所有依赖都被 vite 打进 bundle 了）
+asar: true
+
+win:
+  # 用 resources/icon.png 生成多尺寸的 ico
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # 没有代码签名证书，不签名（用户安装时会看到 SmartScreen 提示）
+  signAndEditExecutable: true
+  # 安装包和程序的文件名
+  artifactName: ${productName}-安装包-${version}.${ext}
+
+nsis:
+  # 一键安装（不需要选目录），但仍然允许用户改
+  oneClick: false
+  # 允许用户选择安装目录
+  allowToChangeInstallationDirectory: true
+  # 创建桌面快捷方式
+  createDesktopShortcut: true
+  # 创建开始菜单快捷方式
+  createStartMenuShortcut: true
+  shortcutName: 序 · Preface
+  # 卸载时询问是否保留用户数据
+  deleteAppDataOnUninstall: false
+  # 安装包语言
+  installerLanguages:
+    - zh_CN
+  # 中文安装界面
+  language: '2052'
+  # 允许用户选择是否为所有用户安装
+  perMachine: false
+  # 安装完成后可以立即运行
+  runAfterFinish: true

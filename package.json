@@ -1,0 +1,45 @@
+{
+  "name": "preface",
+  "version": "0.1.0",
+  "description": "序 · Preface - 把零散的想法、文件和大段资料，整理成一段给 AI Agent 的清晰提示词",
+  "main": "out/main/index.js",
+  "author": "Preface",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "icons": "node scripts/make-icons.mjs",
+    "package": "npm run build && electron-builder --win",
+    "package:dir": "npm run build && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@fluentui/react-components": "^9.74.9",
+    "@fluentui/react-icons": "^2.0.316",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "codemirror": "^6.0.1",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-markdown": "^9.0.2",
+    "remark-gfm": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4",
+    "zustand": "^5.0.15"
+  }
+}
