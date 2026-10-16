@@ -49,7 +49,7 @@
 
 ### 安装
 
-从 Releases 中下载安装包 `序 · Preface-安装包-0.1.0.exe`，按提示走完即可，安装位置可以自己选。
+从 Releases 中 [下载安装包](https://github.com/Hsiao05/Preface/releases/download/0.1.0/Preface-Installer-0.1.0.exe) `Preface-Installer-0.1.0.exe`，按提示走完即可，安装位置可以自己选。
 
 > **你可能会看到 SmartScreen 的蓝色提示**：“Windows 已保护你的电脑”。点「仍要运行」就行。
 
