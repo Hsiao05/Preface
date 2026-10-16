@@ -1,4 +1,4 @@
-# 序 · Preface
+# 「序 · Preface」for Windows
 
 **把零散的想法、文件和大段资料，整理成一段给 AI Agent 的清晰提示词。**
 
