@@ -1,0 +1,329 @@
+import { useEffect, useState, type JSX } from 'react'
+import {
+  Button,
+  Dropdown,
+  Option,
+  makeStyles,
+  tokens,
+  Tooltip
+} from '@fluentui/react-components'
+import { Add20Regular, TextAdd20Regular, Settings20Regular } from '@fluentui/react-icons'
+import { useStore } from '../store'
+import { CorpusDialog } from './CorpusDialog'
+import { allocateOneId } from '../../shared/allocateId'
+import type { ProfilesView, StyleItemView } from '../../preload/index'
+import type { Target } from '../../shared/types'
+
+const useStyles = makeStyles({
+  bar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 12px',
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    flexWrap: 'nowrap'
+  },
+  spacer: {
+    flex: 1
+  },
+  field: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    whiteSpace: 'nowrap'
+  },
+  label: {
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground3
+  },
+  dropdown: {
+    minWidth: '104px'
+  },
+  modelDropdown: {
+    minWidth: '128px',
+    maxWidth: '180px'
+  },
+  noModel: {
+    color: tokens.colorPaletteRedForeground1
+  }
+})
+
+interface TopBarProps {
+  onOpenSettings: () => void
+}
+
+export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
+  const styles = useStyles()
+  const { draft, styleId, setStyleId, setTarget } = useStore()
+  const [corpusOpen, setCorpusOpen] = useState(false)
+  // 正在编辑的语料。为 null 表示新建。
+  const [editingCorpus, setEditingCorpus] = useState<{
+    id: string
+    title: string
+    content: string
+  } | null>(null)
+  const [profiles, setProfiles] = useState<ProfilesView | null>(null)
+  const [styleItems, setStyleItems] = useState<StyleItemView[]>([])
+
+  // 读取模型配置列表，用于顶栏的切换下拉框
+  useEffect(() => {
+    const load = (): void => {
+      void window.preface.listProfiles().then(setProfiles)
+    }
+    load()
+    // 设置窗口保存后要能刷新到这里
+    window.addEventListener('preface:profiles-changed', load)
+    return () => window.removeEventListener('preface:profiles-changed', load)
+  }, [])
+
+  // 读取风格列表。设置页改了风格之后要刷新。
+  useEffect(() => {
+    const load = (): void => {
+      void window.preface.listStyles().then((data) => {
+        setStyleItems(data.items.filter((i) => i.kind === 'style'))
+      })
+    }
+    load()
+    window.addEventListener('preface:styles-changed', load)
+    return () => window.removeEventListener('preface:styles-changed', load)
+  }, [])
+
+  const currentProfile = profiles?.profiles.find((p) => p.id === profiles.currentId) ?? null
+  const currentStyleName = styleItems.find((s) => s.id === styleId)?.name ?? '清晰直接'
+
+  /** 切换当前使用的模型配置 */
+  const switchProfile = async (id: string): Promise<void> => {
+    const next = await window.preface.setCurrentProfile(id)
+    setProfiles(next)
+    const picked = next.profiles.find((p) => p.id === id)
+    useStore.getState().setNotice({
+      kind: 'success',
+      text: picked ? `已切换到「${picked.name}」` : '已切换模型'
+    })
+  }
+
+  /** 打开文件选择框 */
+  const handlePickFiles = async (): Promise<void> => {
+    const paths = await window.preface.pickFiles()
+    if (paths.length === 0) return
+    await addPathsToDraft(paths)
+  }
+
+  /** 确认粘贴语料 */
+  const handleCorpusConfirm = (title: string, content: string, editingId?: string): void => {
+    const state = useStore.getState()
+
+    // 编辑已有语料
+    if (editingId) {
+      state.updateCorpus(editingId, {
+        title,
+        // 用户手动改过就记为 user，否则保持原样
+        titleSource: title ? 'user' : 'none',
+        content,
+        chars: content.length
+      })
+      setEditingCorpus(null)
+      state.setNotice({
+        kind: 'success',
+        text: `已更新语料 ${editingId}（${content.length.toLocaleString('zh-CN')} 字）`
+      })
+      return
+    }
+
+    // 新建：编号优先复用"既没被占用、也没被引用"的
+    const { id, nextCorpusNo } = allocateOneId(
+      {
+        files: state.draft.files,
+        corpora: state.draft.corpora,
+        intentText: state.draft.intentText,
+        nextFileNo: state.draft.nextFileNo,
+        nextCorpusNo: state.draft.nextCorpusNo
+      },
+      'corpus'
+    )
+
+    state.addCorpus(
+      {
+        id,
+        title,
+        titleSource: title ? 'user' : 'none',
+        content,
+        chars: content.length,
+        createdAt: Date.now()
+      },
+      nextCorpusNo
+    )
+    state.setNotice({
+      kind: 'success',
+      text: `已添加语料 ${id}（${content.length.toLocaleString('zh-CN')} 字）`
+    })
+  }
+
+  /** 打开"粘贴语料"（新建） */
+  const openNewCorpus = (): void => {
+    setEditingCorpus(null)
+    setCorpusOpen(true)
+  }
+
+  /** 点击语料标签：打开编辑窗口 */
+  useEffect(() => {
+    const handler = (event: Event): void => {
+      const detail = (event as CustomEvent<{ id: string }>).detail
+      const state = useStore.getState()
+      const corpus = state.draft.corpora.find((c) => c.id === detail.id)
+      if (!corpus) return
+
+      setEditingCorpus({
+        id: corpus.id,
+        title: corpus.title,
+        content: corpus.content
+      })
+      setCorpusOpen(true)
+    }
+
+    window.addEventListener('preface:edit-corpus', handler)
+    return () => window.removeEventListener('preface:edit-corpus', handler)
+  }, [])
+
+  return (
+    <>
+      <div className={styles.bar}>
+        <Button
+          appearance="subtle"
+          icon={<Add20Regular />}
+          onClick={() => void handlePickFiles()}
+        >
+          上传文件
+        </Button>
+        <Button
+          appearance="subtle"
+          icon={<TextAdd20Regular />}
+          onClick={openNewCorpus}
+        >
+          粘贴语料
+        </Button>
+
+        <div className={styles.spacer} />
+
+        {/* 模型切换：配了多套时直接在这里换 */}
+        <div className={styles.field}>
+          <span className={styles.label}>模型</span>
+          <Dropdown
+            className={styles.modelDropdown}
+            size="small"
+            value={
+              currentProfile
+                ? currentProfile.name
+                : profiles && profiles.profiles.length === 0
+                  ? '未配置'
+                  : '读取中'
+            }
+            selectedOptions={profiles?.currentId ? [profiles.currentId] : []}
+            onOptionSelect={(_, data) => {
+              if (data.optionValue) void switchProfile(data.optionValue)
+            }}
+          >
+            {(profiles?.profiles ?? []).map((p) => (
+              <Option key={p.id} value={p.id} text={p.name}>
+                {p.name}
+                {p.model ? `（${p.model}）` : ''}
+              </Option>
+            ))}
+            {(profiles?.profiles ?? []).length === 0 && (
+              <Option value="__none" disabled>
+                还没有配置模型
+              </Option>
+            )}
+          </Dropdown>
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.label}>风格</span>
+          <Dropdown
+            className={styles.dropdown}
+            size="small"
+            value={currentStyleName}
+            selectedOptions={[styleId]}
+            onOptionSelect={(_, data) => setStyleId(data.optionValue as string)}
+          >
+            {styleItems.map((style) => {
+              // "我的风格"没有样本时不可选
+              const myStyleBlocked =
+                style.id === 'my-style' && (!style.samples || style.samples.length === 0)
+
+              return (
+                <Option
+                  key={style.id}
+                  value={style.id}
+                  disabled={myStyleBlocked}
+                  text={myStyleBlocked ? '请先在设置中添加风格样本' : style.name}
+                >
+                  {myStyleBlocked ? '我的风格（请先在设置中添加风格样本）' : style.name}
+                </Option>
+              )
+            })}
+            {styleItems.length === 0 && (
+              <Option value="clear-direct">清晰直接</Option>
+            )}
+          </Dropdown>
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.label}>目标</span>
+          <Dropdown
+            className={styles.dropdown}
+            size="small"
+            selectedOptions={[draft.target]}
+            value={draft.target === 'local' ? '本地 Agent' : '网页端'}
+            onOptionSelect={(_, data) => setTarget(data.optionValue as Target)}
+          >
+            <Option value="local">本地 Agent</Option>
+            <Option value="web">网页端</Option>
+          </Dropdown>
+        </div>
+
+        <Tooltip content="设置" relationship="label">
+          <Button
+            appearance="subtle"
+            icon={<Settings20Regular />}
+            onClick={onOpenSettings}
+          />
+        </Tooltip>
+      </div>
+
+      <CorpusDialog
+        open={corpusOpen}
+        onClose={() => {
+          setCorpusOpen(false)
+          setEditingCorpus(null)
+        }}
+        onConfirm={handleCorpusConfirm}
+        editing={editingCorpus}
+      />
+    </>
+  )
+}
+
+/** 把路径加入草稿。选择框和拖入共用这段逻辑。 */
+export async function addPathsToDraft(paths: string[]): Promise<void> {
+  const state = useStore.getState()
+  const { added, nextNo, skipped } = await window.preface.addFiles(
+    paths,
+    state.draft.files,
+    state.draft.intentText,
+    state.draft.nextFileNo
+  )
+
+  if (added.length > 0) {
+    state.addFiles(added, nextNo)
+  }
+
+  if (skipped.length > 0 && added.length === 0) {
+    state.setNotice({ kind: 'warning', text: '这些文件已经添加过了，或者文件不存在。' })
+  } else if (skipped.length > 0) {
+    state.setNotice({
+      kind: 'info',
+      text: `已添加 ${added.length} 个文件，跳过 ${skipped.length} 个重复或不存在的。`
+    })
+  }
+}

@@ -1,0 +1,100 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/*
+ * 深浅色模式。
+ * 在 <html> 上的 data-theme 由 useTheme 设置，取值 light 或 dark。
+ * 下面所有颜色都成对定义，保证深色模式下对比度足够。
+ */
+
+/* ---------- CodeMirror 里的 @ 引用显示 ---------- */
+/* 有效引用：带底色的蓝色小标签 */
+.cm-ref-tag {
+  background-color: #deecf9;
+  color: #0f548c;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 失效引用：红色 + 波浪下划线 */
+.cm-broken-ref {
+  background-color: #fde7e9;
+  color: #b10e1c;
+  border-radius: 3px;
+  padding: 1px 5px;
+  text-decoration: underline wavy #b10e1c;
+}
+
+html[data-theme='dark'] .cm-ref-tag {
+  background-color: #0f548c;
+  color: #c7e0f4;
+}
+
+html[data-theme='dark'] .cm-broken-ref {
+  background-color: #442726;
+  color: #ff99a4;
+  text-decoration-color: #ff99a4;
+}
+
+/* ---------- CodeMirror ---------- */
+/*
+ * 【注意】光标、选中色、编辑器背景都不在这里定义。
+ * CodeMirror 会把自己的样式注入到 <head>，优先级高于这个文件，
+ * 所以那些颜色写在 src/renderer/components/IntentEditor.tsx 的
+ * editorTheme() 里，用它的 theme API 才生效。
+ *
+ * 这里只放 CodeMirror 管不到的、我们自己的装饰样式。
+ */
+
+/* ---------- 滚动条 ---------- */
+/* 深色下用浅色滑块，否则在深色背景上看不见 */
+html[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background-color: #4d4d4d;
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background-color: #6b6b6b;
+}
+
+html[data-theme='dark'] ::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* ---------- 拖入文件时的遮罩 ---------- */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1000;
+  border-radius: 6px;
+  font-size: 16px;
+
+  background-color: rgba(15, 108, 189, 0.08);
+  border: 2px dashed #0f6cbd;
+  color: #0f6cbd;
+}
+
+html[data-theme='dark'] .drop-overlay {
+  background-color: rgba(71, 158, 245, 0.1);
+  border-color: #479ef5;
+  color: #479ef5;
+}
