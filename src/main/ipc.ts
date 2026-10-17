@@ -35,6 +35,7 @@ import {
   SpeechError,
   transcribe
 } from './speech'
+import { transcribeAudioFile } from './speech/audioFile'
 import { getSecret as getSecretRaw } from './secrets'
 import type { SpeechConfig } from '../shared/speech'
 import {
@@ -330,13 +331,11 @@ export function setupIpc(): void {
 
   ipcMain.handle('speech:preset', (_event, id: string) => presetById(id) ?? null)
 
-  /**
-   * 识别一段音频。
-   * WAV 数据通过 IPC 传进来，请求由主进程发出（界面进程不碰网络）。
-   */
-  ipcMain.handle('speech:transcribe', async (_event, wavData: ArrayBuffer) => {
-    const settings = loadSettings()
-    const speech = settings.speech
+  /** 当前语音配置和解密后的 Key。两个识别入口共用，避免两份配置逻辑。 */
+  function currentSpeechContext():
+    | { ok: true; config: SpeechConfig; apiKey: string }
+    | { ok: false; error: { message: string; suggestion: string } } {
+    const speech = loadSettings().speech
     const apiKey = getSecretRaw(SPEECH_SECRET_ID)
 
     if (!apiKey) {
@@ -346,33 +345,81 @@ export function setupIpc(): void {
       }
     }
 
-    const config: SpeechConfig = {
-      preset: speech.preset,
-      baseUrl: speech.baseUrl,
-      model: speech.model,
-      apiType: speech.apiType,
-      language: speech.language,
-      maxSeconds: speech.maxSeconds
+    return {
+      ok: true,
+      apiKey,
+      config: {
+        preset: speech.preset,
+        baseUrl: speech.baseUrl,
+        model: speech.model,
+        apiType: speech.apiType,
+        language: speech.language,
+        maxSeconds: speech.maxSeconds
+      }
     }
+  }
+
+  /** 把识别过程抛出的错误转成界面直接显示的中文 */
+  function speechFailure(error: unknown): {
+    ok: false
+    error: { message: string; suggestion?: string }
+  } {
+    if (error instanceof SpeechError) {
+      return { ok: false, error: { message: error.message, suggestion: error.suggestion } }
+    }
+    return {
+      ok: false,
+      error: { message: '识别失败', suggestion: '请检查「设置 → 语音」里的配置。' }
+    }
+  }
+
+  /**
+   * 识别一段音频。
+   * WAV 数据通过 IPC 传进来，请求由主进程发出（界面进程不碰网络）。
+   */
+  ipcMain.handle('speech:transcribe', async (_event, wavData: ArrayBuffer) => {
+    const context = currentSpeechContext()
+    if (!context.ok) return context
 
     try {
       const text = await transcribe({
-        wav: new Uint8Array(wavData),
-        config,
-        apiKey
+        audio: new Uint8Array(wavData),
+        config: context.config,
+        apiKey: context.apiKey
       })
       return { ok: true, text }
     } catch (error) {
-      if (error instanceof SpeechError) {
-        return {
-          ok: false,
-          error: { message: error.message, suggestion: error.suggestion }
-        }
-      }
+      return speechFailure(error)
+    }
+  })
+
+  /**
+   * 转录一个音频文件。
+   *
+   * 【这是唯一读取文件内容的地方】
+   * 只有用户在资料栏点击音频、再点「开始转录」才会走到这里。
+   * 读取只发生在主进程，界面只拿到文字。
+   */
+  ipcMain.handle('speech:transcribe-file', async (_event, path: unknown) => {
+    if (typeof path !== 'string' || !path) {
       return {
         ok: false,
-        error: { message: '识别失败', suggestion: '请检查「设置 → 语音」里的配置。' }
+        error: { message: '文件路径不对', suggestion: '请重新添加这个文件后再试。' }
       }
+    }
+
+    const context = currentSpeechContext()
+    if (!context.ok) return context
+
+    try {
+      const text = await transcribeAudioFile({
+        path,
+        config: context.config,
+        apiKey: context.apiKey
+      })
+      return { ok: true, text }
+    } catch (error) {
+      return speechFailure(error)
     }
   })
 

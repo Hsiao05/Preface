@@ -22,11 +22,11 @@ import { BUILTIN_STYLES, MY_STYLE_ID } from '../shared/prompts/styles'
 export const BUILTIN_VERSIONS = {
   // 块
   role: 1,
-  rules: 2, // 加过"用词检查"
-  simple: 1,
-  markdown: 1,
+  rules: 3, // 2 加过"用词检查"；3 加过"保留命令"
+  simple: 2, // 加过"保留 /命令"
+  markdown: 2, // 加过"保留 /命令"
   // 模板
-  tidy: 1,
+  tidy: 2, // 加过"保留 /命令"
   title: 1,
   // 风格
   'clear-direct': 1,
@@ -144,9 +144,18 @@ export function builtinTextOf(item: StyleItem): string | null {
  *
  * 规则（文档第八节）：
  * - 用户没改过（edited 为 false）的，直接替换为新版
- * - 用户改过的，保留用户的版本，只在设置页提示"内置版本有更新"
+ * - 用户改过的，保留用户的文本和原来的版本号，设置页持续显示"有更新"，
+ *   直到用户点「替换为新版」
+ *
+ * 【为什么改过的项不能更新版本号】
+ * hasBuiltinUpdate() 的判断是 builtinVersion < 当前版本。如果这里把版本号
+ * 也一起更新了，改过的项就永远不会显示"有更新"——用户既没拿到新内容，
+ * 界面也不提示，等于升级悄悄丢了。所以这里必须保留旧版本号。
  */
-function applyBuiltinUpgrades(items: StyleItem[]): { items: StyleItem[]; changed: boolean } {
+export function applyBuiltinUpgrades(items: StyleItem[]): {
+  items: StyleItem[]
+  changed: boolean
+} {
   let changed = false
 
   const next = items.map((item) => {
@@ -155,17 +164,14 @@ function applyBuiltinUpgrades(items: StyleItem[]): { items: StyleItem[]; changed
     const currentVersion = builtinVersionOf(item.id)
     if (item.builtinVersion >= currentVersion) return item
 
-    if (!item.edited) {
-      // 没改过：直接用新版
-      const text = builtinTextOf(item)
-      if (text === null) return item
-      changed = true
-      return { ...item, text, builtinVersion: currentVersion, edited: false }
-    }
+    // 改过的：原样保留，什么都不做（版本号也不动）
+    if (item.edited) return item
 
-    // 改过的：只更新版本号，保留用户的文本（设置页会显示"有更新"）
+    // 没改过：直接用新版
+    const text = builtinTextOf(item)
+    if (text === null) return item
     changed = true
-    return { ...item, builtinVersion: currentVersion }
+    return { ...item, text, builtinVersion: currentVersion, edited: false }
   })
 
   return { items: next, changed }

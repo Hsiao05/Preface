@@ -160,6 +160,10 @@ interface EditorAreaProps {
   statusText?: string | null
   /** 结果已过期（原文改过了） */
   stale?: boolean
+  /** 引用校验没过、补救也没成功时的提示 */
+  refWarning?: string | null
+  /** 原文里的 /命令 没有原样保留时的提示 */
+  commandWarning?: string | null
   /** 重新优化 */
   onReoptimize?: () => void
   /** 切换模式 */
@@ -175,6 +179,8 @@ export function EditorArea({
   optimizing = false,
   statusText,
   stale,
+  refWarning,
+  commandWarning,
   onReoptimize,
   onSwitchMode,
   onArchiveDraft,
@@ -281,6 +287,21 @@ export function EditorArea({
                 <Button size="small" onClick={onReoptimize}>
                   重新优化
                 </Button>
+              </div>
+            )}
+
+            {/*
+              校验提示：引用可能有问题、/命令 没有原样保留。
+              只提示，不阻止保存，也不自动再调用模型。
+            */}
+            {commandWarning && (
+              <div className={styles.staleBar}>
+                <span>{commandWarning}</span>
+              </div>
+            )}
+            {refWarning && (
+              <div className={styles.staleBar}>
+                <span>{refWarning}</span>
               </div>
             )}
 

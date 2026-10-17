@@ -93,11 +93,78 @@ export interface SpeechConfig {
  */
 export interface SpeechEngine {
   readonly name: string
+  /**
+   * @param audio 音频字节
+   * @param options.mime 音频类型。不传按 audio/wav（麦克风录音就是 WAV）
+   * @param options.filename 上传时用的文件名。不传按 audio.wav
+   */
   transcribe(
-    wav: Uint8Array,
-    options: { config: SpeechConfig; apiKey: string; signal?: AbortSignal }
+    audio: Uint8Array,
+    options: {
+      config: SpeechConfig
+      apiKey: string
+      signal?: AbortSignal
+      mime?: string
+      filename?: string
+    }
   ): Promise<string>
 }
+
+// ---------- 音频文件 ----------
+
+/**
+ * 支持直接上传的音频扩展名。
+ *
+ * 不做转码：这些是各家语音服务常见的接收格式，原文件直接交给服务商。
+ * 服务商不认的格式会把它的报错显示给用户。
+ */
+export const AUDIO_EXTENSIONS = [
+  'mp3',
+  'wav',
+  'm4a',
+  'aac',
+  'flac',
+  'ogg',
+  'opus',
+  'webm',
+  'mpga',
+  'mp4'
+] as const
+
+/** 扩展名 → MIME */
+const AUDIO_MIME: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  mpga: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  ogg: 'audio/ogg',
+  opus: 'audio/opus',
+  webm: 'audio/webm'
+}
+
+/** 是不是可以直接转录的音频文件（传扩展名，带不带点都行） */
+export function isAudioFileExt(ext: string): boolean {
+  const normalized = ext.replace(/^\./, '').toLowerCase()
+  return (AUDIO_EXTENSIONS as readonly string[]).includes(normalized)
+}
+
+/** 取扩展名对应的 MIME。不认识的按 audio/mpeg 处理 */
+export function audioMimeForExt(ext: string): string {
+  const normalized = ext.replace(/^\./, '').toLowerCase()
+  return AUDIO_MIME[normalized] ?? 'audio/mpeg'
+}
+
+/**
+ * 音频文件的大小上限。
+ *
+ * 25 MB 是多数语音服务的通用限制（OpenAI 的 whisper 系列就是 25 MB）。
+ * 超过时不做截断，直接提示用户先压缩或截短 —— 悄悄截断会让用户
+ * 以为整段都转录了。
+ */
+export const MAX_AUDIO_FILE_BYTES = 25 * 1024 * 1024
 
 // ---------- 结果清理 ----------
 

@@ -3,6 +3,7 @@ import { useStore } from './store'
 import { buildTidyMessages } from '../shared/buildMessages'
 import { toOverrides } from './usePromptOverrides'
 import { stripMarkdown } from '../shared/stripMarkdown'
+import { missingCommands } from '../shared/commands'
 import type { CallKind } from '../main/llm'
 import type { LlmStreamEvent } from '../preload/index'
 import type { UsageInfo } from '../shared/sse'
@@ -244,6 +245,13 @@ export function useLlmRun(): {
   return { state, run, cancel }
 }
 
+/** 整理结果丢了命令时，等用户决定要不要覆盖 */
+export interface PendingCommandReplace {
+  original: string
+  cleaned: string
+  missing: string[]
+}
+
 /** 整理碎碎念：把结果替换原文，并记下原文以便撤销 */
 export function useTidy(): {
   tidy: () => Promise<void>
@@ -252,9 +260,16 @@ export function useTidy(): {
   running: boolean
   streamText: string
   cancel: () => void
+  /** 整理结果缺少 /命令，等用户确认 */
+  pendingCommand: PendingCommandReplace | null
+  /** 仍然替换原文 */
+  confirmReplace: () => void
+  /** 保留原文 */
+  cancelReplace: () => void
 } {
   const { state, run, cancel } = useLlmRun()
   const [undoText, setUndoText] = useState<string | null>(null)
+  const [pendingCommand, setPendingCommand] = useState<PendingCommandReplace | null>(null)
 
   const tidy = useCallback(async (): Promise<void> => {
     const store = useStore.getState()
@@ -287,6 +302,16 @@ export function useTidy(): {
           return
         }
 
+        /*
+         * 整理会直接覆盖原文。如果结果丢了 /命令，覆盖后再提示就晚了
+         * —— 所以先停下来问一句。仍然不额外调用模型。
+         */
+        const missing = missingCommands(original, cleaned)
+        if (missing.length > 0) {
+          setPendingCommand({ original, cleaned, missing })
+          return
+        }
+
         setUndoText(original)
         store.setIntentText(cleaned)
 
@@ -316,12 +341,34 @@ export function useTidy(): {
     store.setNotice({ kind: 'info', text: '已撤销整理。' })
   }, [undoText])
 
+  /** 用户确认：即使少了命令也替换 */
+  const confirmReplace = useCallback((): void => {
+    if (!pendingCommand) return
+    const store = useStore.getState()
+    setUndoText(pendingCommand.original)
+    store.setIntentText(pendingCommand.cleaned)
+    store.setNotice({
+      kind: 'warning',
+      text: `已替换原文，但 ${pendingCommand.missing.join('、')} 没有保留，可以点「撤销整理」恢复原文。`
+    })
+    setPendingCommand(null)
+  }, [pendingCommand])
+
+  /** 用户放弃：保留原文 */
+  const cancelReplace = useCallback((): void => {
+    setPendingCommand(null)
+    useStore.getState().setNotice({ kind: 'info', text: '已保留原文。' })
+  }, [])
+
   return {
     tidy,
     undo,
     canUndo: undoText !== null,
     running: state.running !== null,
     streamText: state.streamText,
-    cancel
+    cancel,
+    pendingCommand,
+    confirmReplace,
+    cancelReplace
   }
 }

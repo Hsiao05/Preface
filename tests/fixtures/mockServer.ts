@@ -117,13 +117,20 @@ async function getSharedServer(): Promise<SharedServer> {
           return
         }
 
-        // 对话
         if (status !== 200) {
           res.writeHead(status, { ...baseHeaders, 'content-type': 'application/json' })
           res.end(JSON.stringify({ error: { message: '模拟的错误' } }))
           return
         }
 
+        // 语音转写：multipart 上传，返回 { text }
+        if (req.url?.includes('/audio/transcriptions')) {
+          res.writeHead(200, { ...baseHeaders, 'content-type': 'application/json' })
+          res.end(JSON.stringify({ text: options.reply ?? '识别结果' }))
+          return
+        }
+
+        // 对话
         const wantsStream = (body as Record<string, unknown>)?.stream === true
         const reply = options.reply ?? '整理后的内容'
 

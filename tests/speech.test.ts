@@ -203,6 +203,32 @@ describe('转写接口的请求格式', () => {
 
     expect(server.requests[0].url).toBe('/audio/transcriptions')
   })
+
+  it('不传格式时按 WAV 上传（麦克风录音）', async () => {
+    server = await startMockServer({ format: 'openai', reply: '识别结果' })
+    await transcribeViaTranscriptions(fakeWav(), {
+      config: config({ baseUrl: server.url }),
+      apiKey: 'k'
+    })
+
+    const body = (server.requests[0].body as string).toLowerCase()
+    expect(body).toContain('filename="audio.wav"')
+    expect(body).toContain('content-type: audio/wav')
+  })
+
+  it('传了格式和文件名时用原文件的（文件转录）', async () => {
+    server = await startMockServer({ format: 'openai', reply: '识别结果' })
+    await transcribeViaTranscriptions(fakeWav(), {
+      config: config({ baseUrl: server.url }),
+      apiKey: 'k',
+      mime: 'audio/mpeg',
+      filename: '会议录音.mp3'
+    })
+
+    const body = server.requests[0].body as string
+    expect(body).toContain('filename="会议录音.mp3"')
+    expect(body.toLowerCase()).toContain('content-type: audio/mpeg')
+  })
 })
 
 describe('聊天接口的请求格式', () => {
@@ -245,6 +271,23 @@ describe('聊天接口的请求格式', () => {
     const audio = content[0].input_audio as Record<string, unknown>
     expect(typeof audio.data).toBe('string')
     expect(audio.data as string).toMatch(/^data:audio\/wav;base64,/)
+  })
+
+  it('传了格式时 data URI 用原格式', async () => {
+    server = await startMockServer({ format: 'openai', reply: '识别结果' })
+    await transcribeViaChatAudio(fakeWav(), {
+      config: config({ baseUrl: server.url, apiType: 'chat-audio' }),
+      apiKey: 'k',
+      mime: 'audio/mp4',
+      filename: '录音.m4a'
+    })
+
+    const body = server.requests[0].body as Record<string, unknown>
+    const messages = body.messages as Array<Record<string, unknown>>
+    const content = messages[0].content as Array<Record<string, unknown>>
+    const audio = content[0].input_audio as Record<string, unknown>
+
+    expect(audio.data as string).toMatch(/^data:audio\/mp4;base64,/)
   })
 
   it('语言是"自动"时不带 asr_options', async () => {

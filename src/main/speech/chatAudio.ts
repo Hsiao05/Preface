@@ -13,16 +13,25 @@ import { SpeechError } from './errors'
  * 取 choices[0].message.content。
  */
 export async function transcribeViaChatAudio(
-  wav: Uint8Array,
-  options: { config: SpeechConfig; apiKey: string; signal?: AbortSignal }
+  audio: Uint8Array,
+  options: {
+    config: SpeechConfig
+    apiKey: string
+    signal?: AbortSignal
+    /** 音频类型。不传按 audio/wav（麦克风录的是 WAV） */
+    mime?: string
+    /** 这里用不到文件名，和转写接口保持同一个参数形状 */
+    filename?: string
+  }
 ): Promise<string> {
   const { config, apiKey, signal } = options
+  const mime = options.mime ?? 'audio/wav'
 
   const url = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`
 
   // 转成 data URI
-  const base64 = bytesToBase64(wav)
-  const dataUri = `data:audio/wav;base64,${base64}`
+  const base64 = bytesToBase64(audio)
+  const dataUri = `data:${mime};base64,${base64}`
 
   const body: Record<string, unknown> = {
     model: config.model,

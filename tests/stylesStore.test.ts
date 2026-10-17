@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { toOverrides } from '../src/renderer/usePromptOverrides'
 import { buildSystemPrompt, buildTidySystemPrompt } from '../src/shared/buildMessages'
 import { BUILTIN_BLOCKS } from '../src/shared/prompts/blocks'
 import { estimateTokens } from '../src/shared/estimateTokens'
 import type { StyleItemView } from '../src/preload/index'
+
+vi.mock('electron', () => ({
+  app: { getPath: () => 'C:\\测试目录' }
+}))
 
 /**
  * 提示词与风格设置（第五阶段）。
@@ -130,12 +134,16 @@ describe('附加要求同时作用于优化和整理', () => {
 })
 
 describe('Token 估算', () => {
-  it('组装后的提示词在预算内（约 1000 tokens 以内）', () => {
+  it('组装后的提示词在预算内（约 1100 tokens 以内）', () => {
     const prompt = buildSystemPrompt({ styleId: 'clear-direct', maxQuestions: 3 })
     const tokens = estimateTokens(prompt)
 
-    // 文档要求：不计风格样本，控制在约 1000 tokens 以内
-    expect(tokens).toBeLessThan(1000)
+    /*
+     * 文档要求：不计风格样本，控制在约 1000 tokens 以内。
+     * 0.2.0 加入"保留命令"规则后，原文已经接近 1000 的提示词多了约 80 tokens，
+     * 所以这里的守卫线放宽到 1100 —— 仍然远低于界面 1500 的黄色预警线。
+     */
+    expect(tokens).toBeLessThan(1100)
   })
 
   it('超过 1500 时界面会提示（这里只验证阈值本身合理）', () => {
@@ -146,58 +154,83 @@ describe('Token 估算', () => {
 })
 
 describe('内置版本升级的规则', () => {
-  /** 与 stylesStore.ts 的 applyBuiltinUpgrades 相同逻辑 */
-  function applyUpgrade(
-    item: { builtin: boolean; edited: boolean; builtinVersion: number; text: string },
-    currentVersion: number,
-    builtinText: string
-  ): { text: string; builtinVersion: number } {
-    if (!item.builtin) return item
-    if (item.builtinVersion >= currentVersion) return item
+  /*
+   * 直接测真实的 applyBuiltinUpgrades，不再在测试里复制一份逻辑 ——
+   * 之前那份复制品把"改过的项也更新版本号"写成了正确行为，
+   * 掩盖了 hasBuiltinUpdate 永远不显示"有更新"的缺陷。
+   */
+  type StyleItem = import('../src/main/stylesStore').StyleItem
 
-    if (!item.edited) {
-      // 没改过：直接替换为新版
-      return { text: builtinText, builtinVersion: currentVersion }
+  function item(over: Partial<StyleItem> & Pick<StyleItem, 'id'>): StyleItem {
+    return {
+      kind: 'block',
+      name: over.id,
+      builtin: true,
+      builtinVersion: 1,
+      edited: false,
+      text: '旧内容',
+      ...over
     }
-    // 改过的：保留用户的文本，只更新版本号
-    return { text: item.text, builtinVersion: currentVersion }
   }
 
-  it('用户没改过：直接替换为新版', () => {
-    const result = applyUpgrade(
-      { builtin: true, edited: false, builtinVersion: 1, text: '旧内容' },
-      2,
-      '新内容'
-    )
-    expect(result.text).toBe('新内容')
-    expect(result.builtinVersion).toBe(2)
+  async function upgrade(items: StyleItem[]): Promise<{
+    items: StyleItem[]
+    changed: boolean
+    hasBuiltinUpdate: (i: StyleItem) => boolean
+  }> {
+    const { applyBuiltinUpgrades, hasBuiltinUpdate } = await import('../src/main/stylesStore')
+    const result = applyBuiltinUpgrades(items)
+    return { ...result, hasBuiltinUpdate }
+  }
+
+  it('用户没改过：直接替换为新版', async () => {
+    const { items } = await upgrade([item({ id: 'rules', builtinVersion: 2 })])
+    expect(items[0].text).toBe(BUILTIN_BLOCKS.rules)
+    expect(items[0].builtinVersion).toBe(3)
+    expect(items[0].edited).toBe(false)
   })
 
-  it('用户改过：保留用户的版本', () => {
-    const result = applyUpgrade(
-      { builtin: true, edited: true, builtinVersion: 1, text: '用户改过的' },
-      2,
-      '新内容'
-    )
-    expect(result.text).toBe('用户改过的')
-    expect(result.builtinVersion).toBe(2) // 版本号更新，但文本保留
+  it('用户改过：保留用户的文本和旧版本号，设置页持续提示有更新', async () => {
+    const { items, changed, hasBuiltinUpdate } = await upgrade([
+      item({ id: 'rules', builtinVersion: 2, edited: true, text: '我自己写的规则' })
+    ])
+
+    expect(items[0].text).toBe('我自己写的规则')
+    expect(items[0].builtinVersion).toBe(2)
+    // 没有内容变化，不必每次启动都写文件
+    expect(changed).toBe(false)
+    // 关键：要能显示"有更新"，否则用户永远收不到新的内置内容
+    expect(hasBuiltinUpdate(items[0])).toBe(true)
   })
 
-  it('版本号没变时什么都不做', () => {
-    const result = applyUpgrade(
-      { builtin: true, edited: false, builtinVersion: 2, text: '当前内容' },
-      2,
-      '新内容'
-    )
-    expect(result.text).toBe('当前内容')
+  it('版本号没变时什么都不做', async () => {
+    const { items, changed } = await upgrade([
+      item({ id: 'rules', builtinVersion: 3, text: '当前内容' })
+    ])
+    expect(items[0].text).toBe('当前内容')
+    expect(changed).toBe(false)
   })
 
-  it('用户新建的风格不受版本升级影响', () => {
-    const result = applyUpgrade(
-      { builtin: false, edited: false, builtinVersion: 0, text: '我的风格' },
-      2,
-      '新内容'
-    )
-    expect(result.text).toBe('我的风格')
+  it('用户新建的风格不受版本升级影响', async () => {
+    const { items } = await upgrade([
+      item({ id: 'my-own', builtin: false, builtinVersion: 0, text: '我的风格' })
+    ])
+    expect(items[0].text).toBe('我的风格')
+    expect(items[0].builtinVersion).toBe(0)
+  })
+
+  it('这次升级覆盖了带命令保留规则的块', async () => {
+    // 老用户数据里的版本号
+    const { items } = await upgrade([
+      item({ id: 'rules', builtinVersion: 2 }),
+      item({ id: 'simple', builtinVersion: 1 }),
+      item({ id: 'markdown', builtinVersion: 1 }),
+      item({ id: 'tidy', kind: 'template', builtinVersion: 1 })
+    ])
+
+    expect(items[0].text).toContain('保留命令')
+    expect(items[1].text).toContain('/命令')
+    expect(items[2].text).toContain('/命令')
+    expect(items[3].text).toContain('/命令')
   })
 })

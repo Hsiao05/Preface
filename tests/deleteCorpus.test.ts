@@ -9,7 +9,8 @@ import { join } from 'path'
  * 语料标签外层绑了 onClick（打开编辑窗口），删除按钮是它的子元素。
  * React 的事件会冒泡，点叉时先触发删除，再冒泡到外层 → 编辑窗口也开了。
  *
- * 文件标签没这个毛病，因为它的外层没有 onClick。
+ * 0.2.0 起，音频文件标签的外层也有 onClick（打开转录窗口），
+ * 所以文件删除按钮也加了同样的拦截。
  *
  * 【修法】
  * 删除按钮的 onClick 里加 event.stopPropagation()。
@@ -33,6 +34,13 @@ describe('删除语料不会顺带打开编辑窗口', () => {
     const j = bar.indexOf("requestDelete(corpus.id", i)
     expect(i).toBeGreaterThan(-1)
     expect(j).toBeGreaterThan(i)
+  })
+
+  it('文件删除按钮也阻止冒泡（音频标签现在可点击）', () => {
+    const i = bar.indexOf("requestDelete(file.id, file.name, 'file')")
+    expect(i).toBeGreaterThan(-1)
+    const before = bar.slice(Math.max(0, i - 300), i)
+    expect(before).toContain('event.stopPropagation()')
   })
 
   it('语料标签外层仍然可以点击编辑（没把功能改坏）', () => {

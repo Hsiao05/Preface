@@ -7,10 +7,10 @@ import { join } from 'path'
  * 窗口尺寸的一次性迁移。
  *
  * 【为什么单独测这个】
- * 默认宽度从 560 加宽到 700 之后，老用户的 window-state.json 里存着 560，
- * 会盖住新默认值 —— 装完新版本窗口还是挤得很难看，用户会以为改动没生效。
- * 这段迁移代码只在本地跑一次，最容易在以后被误删，所以这里用真的临时目录、
- * 真的文件去跑真实的 loadWindowState()。
+ * 默认宽度从 560 加宽到 700、又加宽到 880 之后，老用户的 window-state.json
+ * 里存着旧值，会盖住新默认值 —— 装完新版本窗口还是挤得很难看，用户会以为
+ * 改动没生效。这段迁移代码只在本地跑一次，最容易在以后被误删，所以这里用
+ * 真的临时目录、真的文件去跑真实的 loadWindowState()。
  */
 
 let userDataDir: string
@@ -37,12 +37,21 @@ function writeState(data: unknown): void {
 }
 
 describe('窗口尺寸迁移', () => {
-  it('把没动过的旧默认宽度 560 换成 700', () => {
+  it('把最早那代旧默认宽度 560 换成 880', () => {
     writeState({ x: 100, y: 100, width: 560, height: 720, maximized: false })
 
     const state = loadWindowState()
 
-    expect(state.width).toBe(700)
+    expect(state.width).toBe(880)
+    expect(state.height).toBe(720)
+  })
+
+  it('把上一代旧默认宽度 700 也换成 880（顶栏按钮换行的那次）', () => {
+    writeState({ x: 100, y: 100, width: 700, height: 720, maximized: false })
+
+    const state = loadWindowState()
+
+    expect(state.width).toBe(880)
     expect(state.height).toBe(720)
   })
 
@@ -64,19 +73,28 @@ describe('窗口尺寸迁移', () => {
     expect(state.height).toBe(900)
   })
 
-  it('只改了高度、宽度还是 560 的也算用户自己调过', () => {
-    writeState({ x: 100, y: 100, width: 560, height: 1100 })
+  it('只改了高度、宽度还是旧默认值的也算用户自己调过', () => {
+    writeState({ x: 100, y: 100, width: 700, height: 1100 })
 
     const state = loadWindowState()
 
-    expect(state.width).toBe(560)
+    expect(state.width).toBe(700)
     expect(state.height).toBe(1100)
+  })
+
+  it('高度恰好等于旧默认值但宽度不是的，不算旧默认尺寸', () => {
+    // 用户把 700 拖宽到 760，高度没动 —— 这是用户的尺寸，不要改
+    writeState({ x: 100, y: 100, width: 760, height: 720 })
+
+    const state = loadWindowState()
+
+    expect(state.width).toBe(760)
   })
 
   it('文件不存在时用新默认尺寸', () => {
     const state = loadWindowState()
 
-    expect(state.width).toBe(700)
+    expect(state.width).toBe(880)
     expect(state.height).toBe(720)
   })
 })

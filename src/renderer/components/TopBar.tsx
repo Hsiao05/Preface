@@ -10,7 +10,7 @@ import {
 import { Add20Regular, TextAdd20Regular, Settings20Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
 import { CorpusDialog } from './CorpusDialog'
-import { allocateOneId } from '../../shared/allocateId'
+import { addCorpusToDraft } from '../corpusActions'
 import type { ProfilesView, StyleItemView } from '../../preload/index'
 import type { Target } from '../../shared/types'
 
@@ -21,10 +21,23 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '10px 12px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    flexWrap: 'nowrap'
+    // 窗口窄时整组换行，而不是把按钮压到文字折行
+    flexWrap: 'wrap'
   },
   spacer: {
-    flex: 1
+    flex: 1,
+    minWidth: 0
+  },
+  /**
+   * 左上角两个按钮。
+   *
+   * 【必须不换行】窗口偏窄时 flex 会把按钮压扁，Fluent 的按钮文字
+   * 就折成两行（「上传文件」变成「上传 / 文件」），顶栏高度跟着变。
+   * 让按钮保持自己的宽度，宁可挤 spacer。
+   */
+  actionButton: {
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   },
   field: {
     display: 'flex',
@@ -131,31 +144,10 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     }
 
     // 新建：编号优先复用"既没被占用、也没被引用"的
-    const { id, nextCorpusNo } = allocateOneId(
-      {
-        files: state.draft.files,
-        corpora: state.draft.corpora,
-        intentText: state.draft.intentText,
-        nextFileNo: state.draft.nextFileNo,
-        nextCorpusNo: state.draft.nextCorpusNo
-      },
-      'corpus'
-    )
-
-    state.addCorpus(
-      {
-        id,
-        title,
-        titleSource: title ? 'user' : 'none',
-        content,
-        chars: content.length,
-        createdAt: Date.now()
-      },
-      nextCorpusNo
-    )
+    const corpus = addCorpusToDraft(title, content)
     state.setNotice({
       kind: 'success',
-      text: `已添加语料 ${id}（${content.length.toLocaleString('zh-CN')} 字）`
+      text: `已添加语料 ${corpus.id}（${content.length.toLocaleString('zh-CN')} 字）`
     })
   }
 
@@ -189,6 +181,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     <>
       <div className={styles.bar}>
         <Button
+          className={styles.actionButton}
           appearance="subtle"
           icon={<Add20Regular />}
           onClick={() => void handlePickFiles()}
@@ -196,6 +189,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
           上传文件
         </Button>
         <Button
+          className={styles.actionButton}
           appearance="subtle"
           icon={<TextAdd20Regular />}
           onClick={openNewCorpus}

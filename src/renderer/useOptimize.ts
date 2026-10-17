@@ -11,6 +11,7 @@ import {
   type ClarifyAnswer
 } from '../shared/conversation'
 import { validateRefs } from '../shared/validateRefs'
+import { buildCommandWarning } from '../shared/commands'
 import { toOverrides } from './usePromptOverrides'
 import { stripMarkdown, stripPreamble } from '../shared/stripMarkdown'
 import { formatTokenCount } from '../shared/estimateTokens'
@@ -44,6 +45,8 @@ export interface OptimizeState {
   fellBack: boolean
   /** 引用校验没过、补救也没成功时的提示 */
   refWarning: string | null
+  /** 原文里的 /命令 没有原样保留（或结果里多出了命令）时的提示 */
+  commandWarning: string | null
   /** 本次用量 */
   usage: { input: number; output: number; cached: number } | null
   /** 这次调用带了推理过程 */
@@ -57,6 +60,7 @@ const INITIAL: OptimizeState = {
   resolvedMode: null,
   fellBack: false,
   refWarning: null,
+  commandWarning: null,
   usage: null,
   sawReasoning: false
 }
@@ -290,6 +294,8 @@ export function useOptimize(): {
           ...prev,
           phase: 'idle',
           refWarning: warning,
+          // 只比对、只提示，不额外调用模型
+          commandWarning: buildCommandWarning(sourceText, text),
           questions: []
         }))
         setStreamText('')
@@ -526,7 +532,12 @@ export function useOptimize(): {
       const cleaned = target === 'simple' ? stripMarkdown(text) : text
 
       commitResult(cleaned, target, result.usage)
-      setState((prev) => ({ ...prev, phase: 'idle', resolvedMode: target }))
+      setState((prev) => ({
+        ...prev,
+        phase: 'idle',
+        resolvedMode: target,
+        commandWarning: buildCommandWarning(sourceText, cleaned)
+      }))
       setStreamText('')
     },
     [callModel, commitResult]

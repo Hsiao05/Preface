@@ -11,9 +11,12 @@ import {
   tokens,
   Tooltip
 } from '@fluentui/react-components'
-import { Dismiss12Regular } from '@fluentui/react-icons'
+import { Dismiss12Regular, Mic16Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
 import { countRef } from '../../shared/refs'
+import { isAudioFileExt } from '../../shared/speech'
+import { AudioTranscribeDialog } from './AudioTranscribeDialog'
+import type { FileResource } from '../../shared/types'
 
 const useStyles = makeStyles({
   bar: {
@@ -55,6 +58,14 @@ const useStyles = makeStyles({
   chipDragging: {
     opacity: 0.5
   },
+  /** 音频文件：可以点击打开转录窗口 */
+  chipAudio: {
+    cursor: 'pointer'
+  },
+  micMark: {
+    color: tokens.colorBrandForeground1,
+    flexShrink: 0
+  },
   chipMissing: {
     border: `1px solid ${tokens.colorPaletteRedBorder2}`,
     backgroundColor: tokens.colorPaletteRedBackground1
@@ -89,6 +100,8 @@ export function ResourceBar(): JSX.Element {
   const styles = useStyles()
   const { draft, missingFiles, removeFile, removeCorpus } = useStore()
   const [pending, setPending] = useState<PendingDelete | null>(null)
+  // 正在转录的音频文件。为 null 表示窗口关闭。
+  const [audioFile, setAudioFile] = useState<FileResource | null>(null)
 
   const hasResources = draft.files.length > 0 || draft.corpora.length > 0
 
@@ -135,17 +148,37 @@ export function ResourceBar(): JSX.Element {
 
         {draft.files.map((file) => {
           const missing = missingFiles.has(file.id)
+          // 音频文件可以点击打开转录窗口；其他文件保持原来的纯拖动行为
+          const audio = !missing && isAudioFileExt(file.ext)
+          const tooltip = missing
+            ? '文件已移动或删除'
+            : audio
+              ? `${file.path}（点击转录，或拖到原文里引用）`
+              : `${file.path}（可拖到原文里引用）`
+
           return (
-            <Tooltip
-              key={file.id}
-              content={`${missing ? '文件已移动或删除' : file.path}（可拖到原文里引用）`}
-              relationship="label"
-            >
+            <Tooltip key={file.id} content={tooltip} relationship="label">
               <span
-                className={`${styles.chip} ${missing ? styles.chipMissing : ''}`}
+                className={`${styles.chip} ${missing ? styles.chipMissing : ''} ${
+                  audio ? styles.chipAudio : ''
+                }`}
                 draggable
                 onDragStart={(event) => beginRefDrag(event, file.id)}
+                role={audio ? 'button' : undefined}
+                tabIndex={audio ? 0 : undefined}
+                onClick={audio ? () => setAudioFile(file) : undefined}
+                onKeyDown={
+                  audio
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setAudioFile(file)
+                        }
+                      }
+                    : undefined
+                }
               >
+                {audio && <Mic16Regular className={styles.micMark} />}
                 <span className={styles.id}>{file.id}</span>
                 <span>{file.name}</span>
                 {missing && <span className={styles.missingMark}>（已丢失）</span>}
@@ -156,7 +189,12 @@ export function ResourceBar(): JSX.Element {
                   draggable={false}
                   icon={<Dismiss12Regular />}
                   aria-label={`删除 ${file.id}`}
-                  onClick={() => requestDelete(file.id, file.name, 'file')}
+                  onClick={(event) => {
+                    // 【必须阻止冒泡】音频标签外层的 onClick 是"打开转录窗口"，
+                    // 删除按钮在它里面。不拦住的话，点叉会一边删一边把转录窗口弹出来。
+                    event.stopPropagation()
+                    requestDelete(file.id, file.name, 'file')
+                  }}
                 />
               </span>
             </Tooltip>
@@ -220,6 +258,8 @@ export function ResourceBar(): JSX.Element {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+
+      <AudioTranscribeDialog file={audioFile} onClose={() => setAudioFile(null)} />
     </>
   )
 }

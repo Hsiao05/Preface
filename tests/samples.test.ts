@@ -6,18 +6,18 @@ import { assemblePrompt } from '../src/shared/assemble'
 /**
  * 效果样例集的数据完整性。
  *
- * 这 10 个用例要靠真实模型人工检查效果（见 docs/SPEC.md 第六节）。
+ * 这 11 个用例要靠真实模型人工检查效果（见 docs/SPEC.md 第六节）。
  * 单元测试负责保证：用例本身是合法的、能被组装成有效的输入，
  * 这样人工验证时不会因为数据问题白跑一遍。
  */
 
 describe('样例集', () => {
-  it('正好 10 个用例', () => {
-    expect(SAMPLES).toHaveLength(10)
+  it('正好 11 个用例', () => {
+    expect(SAMPLES).toHaveLength(11)
   })
 
-  it('编号从 1 到 10 连续', () => {
-    expect(SAMPLES.map((s) => s.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  it('编号从 1 到 11 连续', () => {
+    expect(SAMPLES.map((s) => s.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
   })
 
   it('每个用例都有输入特点说明和检查要点', () => {
@@ -109,5 +109,11 @@ describe('每个用例检查它特有的东西', () => {
     expect(sample.intentText).toContain('民法典')
     expect(sample.intentText).toContain('张伟明')
     expect(sample.files[0].name).toBe('合同修订说明_v2.docx')
+  })
+
+  it('用例 11：含 /命令 和参数', () => {
+    const sample = SAMPLES[10]
+    expect(sample.intentText).toContain('/review')
+    expect(sample.intentText).toContain('/xxx-skill --strict')
   })
 })

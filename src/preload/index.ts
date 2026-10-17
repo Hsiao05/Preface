@@ -272,6 +272,15 @@ const api = {
       | { ok: true; text: string }
       | { ok: false; error: { message: string; suggestion?: string } }
     >,
+  /**
+   * 转录一个音频文件。
+   * 主进程读取这一个文件并发出请求，界面只拿到文字。
+   */
+  transcribeAudioFile: (path: string) =>
+    ipcRenderer.invoke('speech:transcribe-file', path) as Promise<
+      | { ok: true; text: string }
+      | { ok: false; error: { message: string; suggestion?: string } }
+    >,
   cancelTranscribe: () => ipcRenderer.invoke('speech:cancel') as Promise<boolean>,
 
   // ---------- 主进程事件 ----------

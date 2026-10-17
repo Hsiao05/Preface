@@ -24,11 +24,12 @@ import { transcribeViaChatAudio } from './chatAudio'
 /** 在线 API 引擎。按 apiType 分派到两种请求格式。 */
 const onlineApiEngine: SpeechEngine = {
   name: '在线 API',
-  async transcribe(wav, { config, apiKey, signal }) {
+  async transcribe(audio, { config, apiKey, signal, mime, filename }) {
+    const options = { config, apiKey, signal, mime, filename }
     if (config.apiType === 'chat-audio') {
-      return transcribeViaChatAudio(wav, { config, apiKey, signal })
+      return transcribeViaChatAudio(audio, options)
     }
-    return transcribeViaTranscriptions(wav, { config, apiKey, signal })
+    return transcribeViaTranscriptions(audio, options)
   }
 }
 
@@ -56,11 +57,15 @@ export function cancelTranscribe(): boolean {
 // ---------- 主入口 ----------
 
 export interface TranscribeInput {
-  /** WAV 数据 */
-  wav: Uint8Array
+  /** 音频字节。麦克风录音是 16kHz WAV；文件转录是原文件内容 */
+  audio: Uint8Array
   config: SpeechConfig
   apiKey: string
   timeoutMs?: number
+  /** 音频类型。不传按 audio/wav */
+  mime?: string
+  /** 上传时用的文件名。不传按 audio.wav */
+  filename?: string
 }
 
 /**
@@ -83,14 +88,16 @@ export async function transcribe(input: TranscribeInput): Promise<string> {
 
   log(
     `开始语音识别（${currentEngine().name}，模型 ${input.config.model}，` +
-      `音频 ${input.wav.length} 字节）`
+      `音频 ${input.audio.length} 字节）`
   )
 
   try {
-    const text = await currentEngine().transcribe(input.wav, {
+    const text = await currentEngine().transcribe(input.audio, {
       config: input.config,
       apiKey: input.apiKey,
-      signal: controller.signal
+      signal: controller.signal,
+      mime: input.mime,
+      filename: input.filename
     })
 
     log(`语音识别完成，识别出 ${text.length} 字`)

@@ -188,6 +188,8 @@ export default function App(): JSX.Element {
           }
           statusText={statusText}
           stale={draft.result?.stale === true}
+          refWarning={optimize.state.refWarning}
+          commandWarning={optimize.state.commandWarning}
           onReoptimize={handleOptimize}
           onSwitchMode={optimize.state.resolvedMode ? optimize.switchMode : undefined}
           onArchiveDraft={handleArchiveDraft}
@@ -247,6 +249,32 @@ export default function App(): JSX.Element {
               </Button>
               <Button appearance="primary" onClick={optimize.confirmOverwrite}>
                 覆盖
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      {/* 整理结果丢了 /命令：覆盖原文前先问一句 */}
+      <Dialog
+        open={tidy.pendingCommand !== null}
+        onOpenChange={(_, d) => !d.open && tidy.cancelReplace()}
+      >
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>整理结果里缺少命令</DialogTitle>
+            <DialogContent>
+              原文里的 {tidy.pendingCommand?.missing.join('、')} 没有出现在整理结果里。
+              如果直接替换，这些命令就没法执行了。
+              <br />
+              可以点「取消」保留原文，手动把命令补进结果后再试。
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={tidy.cancelReplace}>
+                取消
+              </Button>
+              <Button appearance="primary" onClick={tidy.confirmReplace}>
+                仍然替换
               </Button>
             </DialogActions>
           </DialogBody>

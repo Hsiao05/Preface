@@ -3,7 +3,7 @@ import type { CorpusResource, FileResource, ReplyFormat } from '../../src/shared
 /**
  * 效果样例集（文档第六节）。
  *
- * 这 10 个固定输入用于"每次修改内置提示词后，用真实模型跑一遍，
+ * 这 11 个固定输入用于"每次修改内置提示词后，用真实模型跑一遍，
  * 逐个检查结果，确认效果没有变差"。
  *
  * 【注意】这组用例需要真实模型才能验证，所以不在单元测试里自动跑。
@@ -155,6 +155,16 @@ export const SAMPLES: Sample[] = [
     intentText:
       '请修改 @F1，涉及《民法典》第 584 条的表述要准确。另外把张伟明的意见加进去，文件名叫"合同修订说明_v2.docx"。',
     files: [file('F1', '合同修订说明_v2.docx')],
+    corpora: [],
+    mode: 'auto',
+    replyFormat: 'none'
+  },
+  {
+    no: 11,
+    trait: '含 /命令 和 Skill 调用',
+    expect: '/review 和 /xxx-skill 逐字保留，大小写、连字符、参数都不变',
+    intentText: '先用 /review 检查 @F1 的第二部分，然后跑一下 /xxx-skill --strict 看看有没有漏掉的约束。',
+    files: [file('F1', '项目说明.docx')],
     corpora: [],
     mode: 'auto',
     replyFormat: 'none'

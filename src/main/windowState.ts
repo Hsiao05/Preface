@@ -7,10 +7,10 @@ import { z } from 'zod'
  * 默认窗口尺寸。
  *
  * 宽度按顶栏的实际需要定：两个按钮 + 三个下拉框（模型/风格/目标）
- * + 设置按钮，合计约 680px，再留一点余量给较长的模型配置名。
- * 用 560 会把顶栏压得很难看。
+ * + 设置按钮，合计约 780px，再留一点余量给较长的模型配置名。
+ * 700 会把「上传文件」「粘贴语料」压到换行。
  */
-export const DEFAULT_WIDTH = 700
+export const DEFAULT_WIDTH = 880
 export const DEFAULT_HEIGHT = 720
 
 const windowStateSchema = z.object({
@@ -30,22 +30,27 @@ const DEFAULTS: WindowState = {
   height: DEFAULT_HEIGHT
 }
 
-/** 老版本用过的默认宽度 */
-const OLD_DEFAULT_WIDTH = 560
+/**
+ * 老版本用过的默认宽度。
+ *
+ * 560 → 700 是 0.1.x 的调整；700 → 880 是 0.2.1 的调整（顶栏按钮被挤压换行）。
+ * 每一代都要保留，因为用户可能从任意一个老版本直接升级上来。
+ */
+const OLD_DEFAULT_WIDTHS = [560, 700]
 
 /**
  * 把"从没动过的旧默认尺寸"换成新默认值。
  *
  * 【为什么需要】
- * 默认宽度从 560 加宽到 700 之后，老用户的 window-state.json 里存着
- * 560 —— 存的值会盖住新默认值，等于没改。表现是装完新版本，窗口还是
+ * 默认宽度从 560 加宽到 700、再到 880 之后，老用户的 window-state.json 里
+ * 存着旧值 —— 存的值会盖住新默认值，等于没改。表现是装完新版本，窗口还是
  * 挤得很难看，用户会以为改动没生效。
  *
  * 只在"正好是那一组旧默认值"时才替换。用户自己拖过窗口的话，宽高不会
  * 恰好都落在旧默认值上，那种情况按用户的来。
  */
 export function migrateWindowState(state: WindowState): WindowState {
-  if (state.width !== OLD_DEFAULT_WIDTH) return state
+  if (!OLD_DEFAULT_WIDTHS.includes(state.width)) return state
   if (state.height !== DEFAULTS.height) return state
   return { ...state, width: DEFAULT_WIDTH }
 }

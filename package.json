@@ -1,6 +1,6 @@
 {
   "name": "preface",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "序 · Preface - 把零散的想法、文件和大段资料，整理成一段给 AI Agent 的清晰提示词",
   "main": "out/main/index.js",
   "author": "Preface",
