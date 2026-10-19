@@ -15,7 +15,6 @@ const SAVE_DELAY = 1000
 export function useDraftPersistence(): void {
   const draft = useStore((s) => s.draft)
   const loaded = useStore((s) => s.loaded)
-  const setDraft = useStore((s) => s.setDraft)
   const setPrevious = useStore((s) => s.setPrevious)
   const setLoaded = useStore((s) => s.setLoaded)
   const setNotice = useStore((s) => s.setNotice)
@@ -36,7 +35,7 @@ export function useDraftPersistence(): void {
       if (cancelled) return
 
       if (saved) {
-        setDraft(saved)
+        useStore.getState().replaceDraft(saved)
         lastSaved.current = JSON.stringify(saved)
       }
       if (previous && !previous.expired) {
@@ -48,7 +47,7 @@ export function useDraftPersistence(): void {
     return () => {
       cancelled = true
     }
-  }, [setDraft, setPrevious, setLoaded])
+  }, [setPrevious, setLoaded])
 
   // ---------- 防抖自动保存 ----------
   useEffect(() => {
@@ -103,7 +102,7 @@ export async function restorePreviousDraft(): Promise<boolean> {
   const previous = state.previous
   if (!previous) return false
 
-  state.setDraft(previous.draft)
+  state.replaceDraft(previous.draft)
   state.setActiveTab('source')
   return true
 }

@@ -58,6 +58,13 @@ import {
   setCurrentProfile,
   type ModelProfile
 } from './profiles'
+import {
+  deletePromptItem,
+  listPromptItems,
+  PromptLibraryError,
+  savePromptItem,
+  type SavePromptInput
+} from './promptLibraryStore'
 import { hasSecret, removeSecret, setSecret } from './secrets'
 import {
   cancelAllRequests,
@@ -301,6 +308,52 @@ export function setupIpc(): void {
   ipcMain.handle('styles:export', () => exportStyles())
 
   ipcMain.handle('styles:import', (_event, json: string) => importStyles(json))
+
+  // ---------- 我的 Prompt 库 ----------
+  /** 统一的错误出口：损坏的库要明确告诉用户，不能显示成空库 */
+  const promptFailure = (error: unknown): { ok: false; error: string; items: [] } => {
+    const message =
+      error instanceof PromptLibraryError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Prompt 库操作失败。'
+    log(`Prompt 库操作失败: ${message}`)
+    return { ok: false, error: message, items: [] }
+  }
+
+  ipcMain.handle('prompt-library:list', () => {
+    try {
+      return { ok: true as const, items: listPromptItems().items }
+    } catch (error) {
+      return promptFailure(error)
+    }
+  })
+
+  ipcMain.handle('prompt-library:save', async (_event, input: SavePromptInput) => {
+    try {
+      // 只挑需要的字段，界面多传的东西一概不接受
+      const safe: SavePromptInput = {
+        id: input?.id,
+        title: input?.title,
+        content: input?.content,
+        titleSource: input?.titleSource
+      }
+      const data = await savePromptItem(safe)
+      return { ok: true as const, items: data.items }
+    } catch (error) {
+      return promptFailure(error)
+    }
+  })
+
+  ipcMain.handle('prompt-library:delete', async (_event, id: string) => {
+    try {
+      const data = await deletePromptItem(id)
+      return { ok: true as const, items: data.items }
+    } catch (error) {
+      return promptFailure(error)
+    }
+  })
 
   // ---------- 语音输入 ----------
   ipcMain.handle('speech:get-config', () => {

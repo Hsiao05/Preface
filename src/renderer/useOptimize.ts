@@ -13,9 +13,10 @@ import {
 import { validateRefs } from '../shared/validateRefs'
 import { buildCommandWarning } from '../shared/commands'
 import { toOverrides } from './usePromptOverrides'
-import { stripMarkdown, stripPreamble } from '../shared/stripMarkdown'
+import { cleanResultText } from '../shared/cleanResult'
 import { formatTokenCount } from '../shared/estimateTokens'
 import type { ResolvedMode } from '../shared/types'
+import type { PromptSelection } from '../shared/promptLibrary'
 
 /**
  * 一键优化的完整流程（文档第六节）。
@@ -72,6 +73,26 @@ interface Session {
   firstReply: string
   followUps: Array<{ role: 'user' | 'assistant'; content: string }>
   resolvedMode: ResolvedMode | null
+  /**
+   * 本轮开始时冻结的 Prompt 快照。
+   * 澄清、补救、切换模式都沿用它；用户中途改选择只影响下一次优化。
+   */
+  promptSelection: PromptSelection | null
+  /**
+   * 开始本轮时的草稿代数。清空、恢复历史、换新草稿之后代数会变，
+   * 旧会话不能再用到别的草稿上。
+   */
+  draftEpoch: number
+  /**
+   * 运行代次。取消或开始新一轮时 +1，
+   * 迟到的结果在提交前要再核对一次。
+   */
+  runId: number
+}
+
+/** 结果清理时是否按"完整模板套用"处理 */
+function usesTemplateFormat(selection: PromptSelection | null): boolean {
+  return selection?.mode === 'template'
 }
 
 export function useOptimize(): {
@@ -97,6 +118,23 @@ export function useOptimize(): {
   const [pendingConfirm, setPendingConfirm] = useState<(() => void) | null>(null)
   const { run, cancel: cancelRun } = useLlmRun()
   const sessionRef = useRef<Session | null>(null)
+  /** 运行代次。取消、换草稿、开始新一轮都会让旧的迟到结果作废。 */
+  const runIdRef = useRef(0)
+
+  /**
+   * 这次回答还能不能提交。
+   *
+   * 三种情况都算过期：
+   * - 用户取消了，或又开始了新一轮；
+   * - 会话已经被 reset 掉（清空草稿、恢复历史）；
+   * - 草稿代数变了（换了一张草稿）。
+   */
+  const isSessionLive = useCallback((session: Session | null, runId: number): boolean => {
+    if (!session) return false
+    if (runId !== runIdRef.current) return false
+    if (sessionRef.current !== session) return false
+    return useStore.getState().draftEpoch === session.draftEpoch
+  }, [])
 
   /**
    * 结果被用户编辑过时，动手覆盖前先确认。
@@ -169,11 +207,15 @@ export function useOptimize(): {
     (
       text: string,
       mode: ResolvedMode | null,
-      usage: { input: number; output: number; cached: number } | null
+      usage: { input: number; output: number; cached: number } | null,
+      promptSelection: PromptSelection | null
     ) => {
       const store = useStore.getState()
-      // 简单模式要兜底清理残留的 Markdown 符号
-      const cleaned = mode === 'simple' ? stripMarkdown(stripPreamble(text)) : stripPreamble(text)
+      // 简单模式要兜底清理残留的 Markdown 符号；
+      // 完整模板套用时模板正文的格式优先，不做这些清理
+      const cleaned = cleanResultText(text, mode, {
+        template: usesTemplateFormat(promptSelection)
+      })
 
       store.setDraft({
         ...store.draft,
@@ -228,8 +270,10 @@ export function useOptimize(): {
       const reparsed = parseReply(remedy.text)
       const remediedText = reparsed.result ?? remedy.text
 
-      // 补救后的结果仍然要清理
-      const cleaned = mode === 'simple' ? stripMarkdown(remediedText) : remediedText
+      // 补救后的结果仍然要清理（完整模板模式下保留模板格式）
+      const cleaned = cleanResultText(remediedText, mode, {
+        template: usesTemplateFormat(session.promptSelection)
+      })
 
       const recheck = validateRefs({
         source: store.draft.intentText,
@@ -259,6 +303,8 @@ export function useOptimize(): {
     ): Promise<void> => {
       const parsed = parseReply(raw)
       const session = sessionRef.current
+      // 这次回答属于哪一轮。等待补救 / 提交之前先记下来，回来时再核对。
+      const runId = session?.runId ?? runIdRef.current
 
       if (session && isFirstRound) {
         session.firstReply = raw
@@ -287,7 +333,11 @@ export function useOptimize(): {
           ? await verifyAndRemedy(parsed.result, mode, session, sourceText)
           : { text: parsed.result, warning: null }
 
-        commitResult(text, mode, usage)
+        // 【重要】补救期间用户可能取消、清空或换草稿。
+        // 这种时候结果已经作废，不能再写进当前草稿。
+        if (!isSessionLive(session, runId)) return
+
+        commitResult(text, mode, usage, session?.promptSelection ?? null)
         // 拿到结果了，兜底计数清零
         clearFallback()
         setState((prev) => ({
@@ -402,10 +452,15 @@ export function useOptimize(): {
     const stylesData = await window.preface.listStyles()
     const overrides = toOverrides(stylesData.items)
 
+    // 【本轮快照】现在用的就是草稿里选中的那一份，后面库条目怎么改都不影响这一轮
+    const promptSelection = draft.promptSelection
+    store.setActivePrompt(promptSelection)
+
     const systemPrompt = buildSystemPrompt({
       styleId: draft.styleId,
       maxQuestions: settings.maxQuestions,
-      overrides
+      overrides,
+      promptSelection
     })
     const firstUserMessage = buildOptimizeUserMessage({
       mode: draft.mode,
@@ -414,15 +469,23 @@ export function useOptimize(): {
       corpora: draft.corpora,
       intentText: draft.intentText,
       maxQuestions: settings.maxQuestions,
-      corpusInfo: settings.corpusInfo
+      corpusInfo: settings.corpusInfo,
+      promptSelection
     })
+
+    // 新一轮：旧的迟到结果一律作废
+    const runId = runIdRef.current + 1
+    runIdRef.current = runId
 
     sessionRef.current = {
       systemPrompt,
       firstUserMessage,
       firstReply: '',
       followUps: [],
-      resolvedMode: null
+      resolvedMode: null,
+      promptSelection,
+      draftEpoch: store.draftEpoch,
+      runId
     }
 
     setState({ ...INITIAL, phase: 'analyzing' })
@@ -446,8 +509,11 @@ export function useOptimize(): {
       return
     }
 
+    // 等回答期间草稿被清空/替换：这一轮不再提交
+    if (!isSessionLive(sessionRef.current, runId)) return
+
     await handleReply(result.text, result.info, true, result.usage)
-  }, [callModel, handleReply])
+  }, [callModel, handleReply, isSessionLive])
 
   /** 开始优化。结果被编辑过时先问一句。 */
   const optimize = useCallback(async () => {
@@ -493,10 +559,13 @@ export function useOptimize(): {
         return
       }
 
+      // 等回答期间草稿可能已经被清空或换掉
+      if (!isSessionLive(session, session.runId)) return
+
       session.followUps.push({ role: 'assistant', content: result.text })
       await handleReply(result.text, result.info, false, result.usage)
     },
-    [callModel, handleReply]
+    [callModel, handleReply, isSessionLive]
   )
 
   /** 切换模式：在当前对话后面追加一条消息 */
@@ -525,13 +594,18 @@ export function useOptimize(): {
         return
       }
 
+      if (!isSessionLive(session, session.runId)) return
+
       session.followUps.push({ role: 'assistant', content: result.text })
 
       const parsed = parseReply(result.text)
       const text = parsed.result ?? result.text
-      const cleaned = target === 'simple' ? stripMarkdown(text) : text
+      // 完整模板套用时模板格式优先，不按简单模式剥离
+      const cleaned = cleanResultText(text, target, {
+        template: usesTemplateFormat(session.promptSelection)
+      })
 
-      commitResult(cleaned, target, result.usage)
+      commitResult(cleaned, target, result.usage, session.promptSelection)
       setState((prev) => ({
         ...prev,
         phase: 'idle',
@@ -540,7 +614,7 @@ export function useOptimize(): {
       }))
       setStreamText('')
     },
-    [callModel, commitResult]
+    [callModel, commitResult, isSessionLive]
   )
 
   /** 切换模式。结果被编辑过时先问一句。 */
@@ -554,15 +628,28 @@ export function useOptimize(): {
   )
 
   const cancel = useCallback(() => {
+    // 取消之后迟到的回答不能再提交
+    runIdRef.current += 1
     cancelRun()
     setState((prev) => ({ ...prev, phase: 'idle' }))
     setStreamText('')
   }, [cancelRun])
 
+  /**
+   * 丢弃当前会话。
+   *
+   * 清空草稿、恢复历史、换新草稿时必须调用：否则旧会话会接着用在
+   * 另一张草稿上，澄清和补救会串到别人的上下文里。
+   */
   const reset = useCallback(() => {
+    runIdRef.current += 1
+    sessionRef.current = null
+    // 真的把在途请求停掉，而不是只丢弃结果（别让它在后台继续烧 token）
+    cancelRun(true)
     setState(INITIAL)
     setStreamText('')
-  }, [])
+    setPendingConfirm(null)
+  }, [cancelRun])
 
   return {
     state,

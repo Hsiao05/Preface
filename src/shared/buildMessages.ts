@@ -1,6 +1,11 @@
 import { BUILTIN_BLOCKS, type BlockId } from './prompts/blocks'
 import { BUILTIN_TEMPLATES } from './prompts/templates'
 import { findBuiltinStyle } from './prompts/styles'
+import {
+  buildPromptSystemSection,
+  buildPromptUserSection,
+  type PromptSelection
+} from './promptLibrary'
 import type { CorpusResource, FileResource, ReplyFormat } from './types'
 
 /**
@@ -25,11 +30,18 @@ export interface BuildSystemPromptInput {
   styleId: string
   maxQuestions: number
   overrides?: PromptOverrides
+  /**
+   * 本轮使用的「我的 Prompt 库」条目。
+   *
+   * 放在输出协议**之后**追加：模板能影响写法和格式，
+   * 但不能改写程序要解析的协议，协议始终由代码锁定。
+   */
+  promptSelection?: PromptSelection | null
 }
 
 /** 组装优化的系统提示词 */
 export function buildSystemPrompt(input: BuildSystemPromptInput): string {
-  const { styleId, maxQuestions, overrides } = input
+  const { styleId, maxQuestions, overrides, promptSelection } = input
 
   const block = (id: BlockId): string => {
     // protocol 始终从代码里读，不采用用户的覆盖
@@ -44,6 +56,11 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     block('markdown'),
     block('protocol')
   ]
+
+  // 本轮附带的 Prompt：只解释"怎么用"，协议已经在上面锁定
+  if (promptSelection) {
+    parts.push(buildPromptSystemSection(promptSelection))
+  }
 
   // 块 6：表达风格
   const styleText = overrides?.styles?.[styleId] ?? findBuiltinStyle(styleId)?.text
@@ -141,6 +158,8 @@ export interface OptimizeInputParams {
   maxQuestions: number
   /** 提供给优化模型的语料信息：仅标题和字数 / 摘录 300 字 / 全文 */
   corpusInfo: 'title' | 'excerpt300' | 'full'
+  /** 本轮使用的 Prompt 库条目 */
+  promptSelection?: PromptSelection | null
 }
 
 /**
@@ -150,7 +169,16 @@ export interface OptimizeInputParams {
  * 否则会破坏前缀缓存。
  */
 export function buildOptimizeUserMessage(params: OptimizeInputParams): string {
-  const { mode, replyFormat, files, corpora, intentText, maxQuestions, corpusInfo } = params
+  const {
+    mode,
+    replyFormat,
+    files,
+    corpora,
+    intentText,
+    maxQuestions,
+    corpusInfo,
+    promptSelection
+  } = params
 
   const modeLabel = mode === 'auto' ? '自动' : mode === 'simple' ? '简单' : 'Markdown'
   const formatLabel =
@@ -189,6 +217,11 @@ export function buildOptimizeUserMessage(params: OptimizeInputParams): string {
 
       lines.push(line)
     }
+  }
+
+  // 模板放在原文之前：先说明这一轮要用什么写法，再给任务本体
+  if (promptSelection) {
+    lines.push(buildPromptUserSection(promptSelection))
   }
 
   lines.push('【原文】', intentText)

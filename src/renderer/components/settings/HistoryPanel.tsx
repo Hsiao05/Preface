@@ -180,7 +180,8 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
     }
 
     const state = useStore.getState()
-    state.setDraft(draft)
+    // 恢复历史 = 换草稿：旧会话作废，会话回到该记录自己的状态
+    state.replaceDraft(draft)
     state.setActiveTab('source')
     state.setNotice({ kind: 'success', text: '已恢复。' })
     onNotice({ kind: 'success', text: '已恢复到主窗口，关掉设置就能看到。' })

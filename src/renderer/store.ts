@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { CorpusResource, Draft, FileResource, Mode, ReplyFormat, Target } from '../shared/types'
 import { createDraft, draftId } from '../shared/types'
+import type { PromptSelection } from '../shared/promptLibrary'
+import { appendWithSpacing } from '../shared/appendText'
 
 interface AppState {
   draft: Draft
@@ -14,10 +16,22 @@ interface AppState {
   missingFiles: Set<string>
   /** 上一次复制过的草稿，用于"恢复上一次的内容" */
   previous: { draft: Draft; copiedAt: number; expired: boolean } | null
+  /**
+   * 草稿代数。清空、重置、恢复历史时 +1。
+   * 优化会话记下开始时的代数，草稿换了之后旧会话不能接着用。
+   */
+  draftEpoch: number
   /** 草稿是否已从磁盘加载完成 */
   loaded: boolean
   /** 光标位置和当前标签页，隐藏再呼出时恢复 */
   caret: number
+  /**
+   * 当前这一轮优化实际用的 Prompt 快照。
+   *
+   * 和 draft.promptSelection（下一次要用什么）分开：已经开始的澄清、补救、
+   * 模式切换必须沿用开始时的那一份，用户中途换了选择只影响下一次优化。
+   */
+  activePrompt: PromptSelection | null
 
   // ---------- 动作 ----------
   setIntentText: (text: string) => void
@@ -37,8 +51,26 @@ interface AppState {
   removeCorpus: (id: string) => void
   updateCorpus: (id: string, patch: Partial<CorpusResource>) => void
 
+  /** 设置下一次优化要用的 Prompt（null 表示不用） */
+  setPromptSelection: (selection: PromptSelection | null) => void
+  /** 记录本轮优化实际用的快照 */
+  setActivePrompt: (selection: PromptSelection | null) => void
+  /**
+   * 往原文末尾追加文字（Prompt 库的「追加到原文」）。
+   * 与 setIntentText 的区别：已复制的草稿要回到 editing，
+   * 否则下次呼出会直接换成新草稿，刚追加的内容就丢了。
+   */
+  appendIntentText: (addition: string) => void
+
   setMissingFiles: (ids: Set<string>) => void
   setDraft: (draft: Draft) => void
+  /**
+   * 换一张草稿（加载、恢复历史、撤销清空、换新）。
+   *
+   * 和 setDraft 的区别：草稿代数 +1，进行中的优化会话随之作废。
+   * 优化流程自己写回结果时用 setDraft，不能把当前会话踢掉。
+   */
+  replaceDraft: (draft: Draft) => void
   /** 编辑优化结果 */
   setResultText: (text: string) => void
   /** 把结果标记为已过期（原文改过之后） */
@@ -64,6 +96,8 @@ export const useStore = create<AppState>((set) => ({
   previous: null,
   loaded: false,
   caret: 0,
+  activePrompt: null,
+  draftEpoch: 0,
 
   setIntentText: (intentText) =>
     set((state) => {
@@ -137,9 +171,39 @@ export const useStore = create<AppState>((set) => ({
       })
     })),
 
+  // ---------- Prompt 库 ----------
+  setPromptSelection: (promptSelection) =>
+    set((state) => ({ draft: touch(state.draft, { promptSelection }) })),
+
+  setActivePrompt: (activePrompt) => set({ activePrompt }),
+
+  appendIntentText: (addition) =>
+    set((state) => {
+      const intentText = appendWithSpacing(state.draft.intentText, addition)
+      if (intentText === state.draft.intentText) return state
+
+      const draft = touch(state.draft, {
+        intentText,
+        // 已复制的草稿追加了内容，就回到编辑中
+        status: 'editing'
+      })
+      if (draft.result && !draft.result.stale && draft.result.text) {
+        draft.result = { ...draft.result, stale: true }
+      }
+      return { draft }
+    }),
+
   setMissingFiles: (missingFiles) => set({ missingFiles }),
 
   setDraft: (draft) => set({ draft }),
+
+  replaceDraft: (draft) =>
+    set((state) => ({
+      draft,
+      draftEpoch: state.draftEpoch + 1,
+      // 换了一张草稿，上一轮的 Prompt 快照不能再显示成"本轮"
+      activePrompt: null
+    })),
 
   /**
    * 编辑优化结果。
@@ -168,12 +232,15 @@ export const useStore = create<AppState>((set) => ({
     }),
 
   resetDraft: () =>
-    set({
+    set((state) => ({
       draft: createDraft(draftId()),
       activeTab: 'source',
       missingFiles: new Set<string>(),
-      caret: 0
-    }),
+      caret: 0,
+      // 新草稿没有选择，上一轮用的 Prompt 也不能带过来
+      activePrompt: null,
+      draftEpoch: state.draftEpoch + 1
+    })),
 
   /**
    * 一键清空：清掉草稿内容，但保留用户的选择和偏好。
@@ -192,10 +259,13 @@ export const useStore = create<AppState>((set) => ({
           mode: state.draft.mode,
           styleId: state.draft.styleId,
           replyFormat: state.draft.replyFormat
+          // 【注意】promptSelection 属于草稿内容，清空时不保留
         },
         activeTab: 'source',
         missingFiles: new Set<string>(),
-        caret: 0
+        caret: 0,
+        activePrompt: null,
+        draftEpoch: state.draftEpoch + 1
       }
     }),
 

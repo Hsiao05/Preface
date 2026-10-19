@@ -98,8 +98,8 @@ export function ClearButton({ onArchive }: Props): JSX.Element {
   const handleUndo = (): void => {
     if (!snapshot) return
 
-    // 完整恢复
-    useStore.getState().setDraft(snapshot)
+    // 完整恢复（换草稿，旧优化会话作废）
+    useStore.getState().replaceDraft(snapshot)
     setSnapshot(null)
     setSecondsLeft(null)
 

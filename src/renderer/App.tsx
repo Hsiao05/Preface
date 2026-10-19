@@ -29,6 +29,14 @@ import { NoticeBar } from './components/NoticeBar'
 import { CopyIssuesDialog } from './components/CopyIssuesDialog'
 import { UploadListDialog } from './components/UploadListDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { PromptLibraryDialog } from './components/PromptLibraryDialog'
+import { PromptContextBar } from './components/PromptContextBar'
+import {
+  normalizePromptTitle,
+  promptSelectionFrom,
+  type PromptLibraryItem,
+  type PromptUsageMode
+} from '../shared/promptLibrary'
 
 const useStyles = makeStyles({
   root: {
@@ -45,8 +53,10 @@ export default function App(): JSX.Element {
   const styles = useStyles()
   const setNotice = useStore((s) => s.setNotice)
   const draft = useStore((s) => s.draft)
+  const activePrompt = useStore((s) => s.activePrompt)
   const [dragging, setDragging] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [promptLibraryOpen, setPromptLibraryOpen] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
   // 状态条要不要显示 Token 用量（设置 → 通用）
   const [showTokenUsage, setShowTokenUsage] = useState(true)
@@ -73,6 +83,10 @@ export default function App(): JSX.Element {
   // 草稿的自动保存与恢复
   useDraftPersistence()
 
+  // 草稿代数变化（清空、恢复历史、撤销清空、换新）时丢弃当前优化会话，
+  // 并停掉在途请求，避免旧结果写进新草稿或继续消耗额度。
+  const draftEpoch = useStore((s) => s.draftEpoch)
+
   // 一键复制的完整流程
   const { copy, copyState, confirmCopy, cancelCopy, closeUploadList } = useCopy()
 
@@ -81,6 +95,13 @@ export default function App(): JSX.Element {
 
   // 一键优化
   const optimize = useOptimize()
+
+  // 草稿被替换时丢弃旧会话
+  useEffect(() => {
+    optimize.reset()
+    // optimize.reset 是稳定引用
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftEpoch])
 
   // 主进程事件：快捷键换过、打开设置
   useEffect(() => {
@@ -122,13 +143,15 @@ export default function App(): JSX.Element {
 
   // Esc：先关面板，都没有时隐藏窗口
   const handleEscape = useCallback(() => {
+    // Prompt 库自己处理 Esc（可能还要问是否保存），这里不要抢
+    if (promptLibraryOpen) return
     if (settingsOpen) {
       setSettingsOpen(false)
       return
     }
     if (copyState.issues.length > 0 || copyState.showUploadList) return
     void window.preface.hideWindow()
-  }, [copyState.issues.length, copyState.showUploadList, settingsOpen])
+  }, [copyState.issues.length, copyState.showUploadList, promptLibraryOpen, settingsOpen])
 
   const handleOptimize = useCallback(() => {
     void optimize.optimize()
@@ -155,6 +178,19 @@ export default function App(): JSX.Element {
         ? ('followup' as const)
         : null
 
+  /**
+   * 优化是否仍在进行。
+   *
+   * 等待澄清也属于进行中：这时改「下次优化」的选择，不能影响这一轮。
+   * 不能用 activePrompt !== null 代替 —— 它只表示本轮用过 Prompt，
+   * 请求结束后仍然留着。
+   */
+  const optimizeRunning =
+    optimize.state.phase === 'analyzing' ||
+    optimize.state.phase === 'streaming' ||
+    optimize.state.phase === 'remedying' ||
+    optimize.state.phase === 'waiting-clarify'
+
   // 优化进行中时显示流式内容，否则显示整理的内容
   const streamText = tidy.running ? tidy.streamText : optimize.streamText
 
@@ -167,9 +203,47 @@ export default function App(): JSX.Element {
     showTokenUsage
   })
 
+  /**
+   * 把库里的 Prompt 追加到原文末尾。
+   *
+   * 只整理首尾空白、保留正文内部格式；追加后切到原文页、标记已有结果过期。
+   * 不自动选为模板、不调用模型、不新增语料编号。
+   */
+  const handleAppendPrompt = useCallback((item: PromptLibraryItem) => {
+    const state = useStore.getState()
+    state.appendIntentText(item.content)
+    state.setActiveTab('source')
+    state.setNotice({
+      kind: 'success',
+      text: `已把「${normalizePromptTitle(item.title)}」追加到原文末尾。`
+    })
+  }, [])
+
+  /**
+   * 设为优化时使用的 Prompt：只记选择，不立刻发请求、不改原文。
+   *
+   * 空闲时选好，点「优化提示词」就会用它；只有这一轮已经开始、
+   * 快照已经冻结时，才需要说「从下次优化起生效」。
+   */
+  const handleUsePrompt = useCallback(
+    (item: PromptLibraryItem, mode: PromptUsageMode) => {
+      const state = useStore.getState()
+      state.setPromptSelection(promptSelectionFrom(item, mode))
+      const title = normalizePromptTitle(item.title)
+      state.setNotice({
+        kind: 'info',
+        text: optimizeRunning
+          ? `这一轮已经开始，下次优化起使用「${title}」。`
+          : `优化时将使用「${title}」。`
+      })
+    },
+    [optimizeRunning]
+  )
+
+  // 弹窗打开时暂停主窗口的优化/复制快捷键，避免误触
   useKeyboard({
-    onOptimize: runningKind ? null : handleOptimize,
-    onCopy: runningKind ? null : () => void copy(),
+    onOptimize: runningKind || promptLibraryOpen ? null : handleOptimize,
+    onCopy: runningKind || promptLibraryOpen ? null : () => void copy(),
     onEscape: handleEscape
   })
 
@@ -191,9 +265,23 @@ export default function App(): JSX.Element {
           refWarning={optimize.state.refWarning}
           commandWarning={optimize.state.commandWarning}
           onReoptimize={handleOptimize}
-          onSwitchMode={optimize.state.resolvedMode ? optimize.switchMode : undefined}
+          onSwitchMode={
+            // 完整模板套用时模板格式优先，不提供切换简单/Markdown
+            optimize.state.resolvedMode && activePrompt?.mode !== 'template'
+              ? optimize.switchMode
+              : undefined
+          }
           onArchiveDraft={handleArchiveDraft}
           isDark={isDark}
+          promptContext={
+            <PromptContextBar
+              selection={draft.promptSelection}
+              activePrompt={activePrompt}
+              running={optimizeRunning}
+              onOpenLibrary={() => setPromptLibraryOpen(true)}
+              onRemove={() => useStore.getState().setPromptSelection(null)}
+            />
+          }
         />
         <BottomBar
           onTidy={() => void tidy.tidy()}
@@ -203,6 +291,7 @@ export default function App(): JSX.Element {
           onCancel={runningKind === 'tidy' ? tidy.cancel : optimize.cancel}
           canUndoTidy={tidy.canUndo}
           onUndoTidy={tidy.undo}
+          onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
         />
 
         {dragging && <DropOverlay />}
@@ -280,6 +369,14 @@ export default function App(): JSX.Element {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+
+      <PromptLibraryDialog
+        open={promptLibraryOpen}
+        onClose={() => setPromptLibraryOpen(false)}
+        onAppend={handleAppendPrompt}
+        onUse={handleUsePrompt}
+        busy={runningKind !== null}
+      />
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </FluentProvider>

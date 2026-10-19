@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react'
 import { Button, makeStyles, tokens, Tab, TabList } from '@fluentui/react-components'
 import { useStore } from '../store'
 import { IntentEditor, type IntentEditorHandle } from './IntentEditor'
@@ -19,13 +19,39 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: '8px',
     padding: '0 12px 0 12px',
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    // 窄窗口时让 Prompt 状态独占第二行，而不是把标签和清空挤变形
+    flexWrap: 'wrap',
+    '@media (max-width: 759px)': {
+      paddingTop: '4px'
+    }
   },
   tabActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px'
+    gap: '4px',
+    flexShrink: 0,
+    marginLeft: 'auto'
+  },
+  /** 编辑工具行里的 Prompt 状态，宽度不够时整块换到下一行 */
+  promptSlot: {
+    flexShrink: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    '@media (max-width: 759px)': {
+      order: 3,
+      width: '100%',
+      maxWidth: '100%',
+      paddingBottom: '4px'
+    }
+  },
+  /** 窄窗口下状态条自己占满第二行 */
+  promptSlotInner: {
+    minWidth: 0,
+    maxWidth: '100%'
   },
   body: {
     flex: 1,
@@ -172,6 +198,11 @@ interface EditorAreaProps {
   onArchiveDraft?: (draft: Draft) => void
   /** 当前是不是深色模式（传给 CodeMirror 换主题） */
   isDark?: boolean
+  /**
+   * 编辑区工具行里的 Prompt 使用状态。
+   * 放在这里而不是底栏，避免可变长标题挤占操作按钮的宽度。
+   */
+  promptContext?: ReactNode
 }
 
 export function EditorArea({
@@ -184,7 +215,8 @@ export function EditorArea({
   onReoptimize,
   onSwitchMode,
   onArchiveDraft,
-  isDark = false
+  isDark = false,
+  promptContext
 }: EditorAreaProps): JSX.Element {
   const styles = useStyles()
   const { draft, activeTab, setActiveTab, setIntentText, setResultText } = useStore()
@@ -249,6 +281,12 @@ export function EditorArea({
             优化结果
           </Tab>
         </TabList>
+
+        {promptContext && (
+          <div className={styles.promptSlot}>
+            <div className={styles.promptSlotInner}>{promptContext}</div>
+          </div>
+        )}
 
         {/* 靠右对齐的一键清空 */}
         <div className={styles.tabActions}>

@@ -86,7 +86,8 @@ export function useLlmRun(): {
       trackStream?: boolean
     }
   ) => Promise<string | null>
-  cancel: () => void
+  /** 取消。silent 为 true 时不弹「已取消。」（用户自己动手导致作废时用） */
+  cancel: (silent?: boolean) => void
 } {
   const [state, setState] = useState<LlmRunState>({
     running: null,
@@ -228,7 +229,13 @@ export function useLlmRun(): {
     []
   )
 
-  const cancel = useCallback((): void => {
+  /**
+   * 取消在途请求。
+   *
+   * silent 用于"用户一动手，旧请求就该作废"的场景（例如在标题框里打字），
+   * 这时不需要弹「已取消。」，用户并没有主动点取消。
+   */
+  const cancel = useCallback((silent = false): void => {
     // 先立起标志，这样随后可能到达的 done 事件不会生效
     cancelledRef.current = true
 
@@ -239,7 +246,7 @@ export function useLlmRun(): {
     }
     // 立刻清掉流式预览，界面马上回到可编辑状态
     setState({ running: null, streamText: '', usage: null })
-    useStore.getState().setNotice({ kind: 'info', text: '已取消。' })
+    if (!silent) useStore.getState().setNotice({ kind: 'info', text: '已取消。' })
   }, [])
 
   return { state, run, cancel }

@@ -12,7 +12,7 @@ import { useStore } from '../store'
 import { CorpusDialog } from './CorpusDialog'
 import { addCorpusToDraft } from '../corpusActions'
 import type { ProfilesView, StyleItemView } from '../../preload/index'
-import type { Target } from '../../shared/types'
+import type { Target, TitleSource } from '../../shared/types'
 
 const useStyles = makeStyles({
   bar: {
@@ -73,6 +73,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
   const [editingCorpus, setEditingCorpus] = useState<{
     id: string
     title: string
+    titleSource: TitleSource
     content: string
   } | null>(null)
   const [profiles, setProfiles] = useState<ProfilesView | null>(null)
@@ -122,16 +123,20 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     await addPathsToDraft(paths)
   }
 
-  /** 确认粘贴语料 */
-  const handleCorpusConfirm = (title: string, content: string, editingId?: string): void => {
+  /** 确认粘贴语料。titleSource 由对话框跟踪：手填 user、AI 回填 ai、空标题 none。 */
+  const handleCorpusConfirm = (
+    title: string,
+    content: string,
+    titleSource: TitleSource,
+    editingId?: string
+  ): void => {
     const state = useStore.getState()
 
     // 编辑已有语料
     if (editingId) {
       state.updateCorpus(editingId, {
         title,
-        // 用户手动改过就记为 user，否则保持原样
-        titleSource: title ? 'user' : 'none',
+        titleSource,
         content,
         chars: content.length
       })
@@ -144,7 +149,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     }
 
     // 新建：编号优先复用"既没被占用、也没被引用"的
-    const corpus = addCorpusToDraft(title, content)
+    const corpus = addCorpusToDraft(title, content, titleSource)
     state.setNotice({
       kind: 'success',
       text: `已添加语料 ${corpus.id}（${content.length.toLocaleString('zh-CN')} 字）`
@@ -168,6 +173,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
       setEditingCorpus({
         id: corpus.id,
         title: corpus.title,
+        titleSource: corpus.titleSource,
         content: corpus.content
       })
       setCorpusOpen(true)
@@ -285,6 +291,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
         </Tooltip>
       </div>
 
+      {/* Prompt 库的入口在底栏，这里只负责语料编辑 */}
       <CorpusDialog
         open={corpusOpen}
         onClose={() => {

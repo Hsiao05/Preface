@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import {
   Button,
   Dialog,
@@ -13,8 +13,18 @@ import {
   makeStyles,
   tokens
 } from '@fluentui/react-components'
-import { Sparkle16Regular } from '@fluentui/react-icons'
+import { Dismiss16Regular, Sparkle16Regular } from '@fluentui/react-icons'
 import { useTitle } from '../useTitle'
+import {
+  beginTitleRequest,
+  createTitleState,
+  rebindTitleState,
+  shouldApplyTitle,
+  titleSourceAfterEdit,
+  touchTitleState,
+  type TitleRequestState
+} from '../titleRequest'
+import type { TitleSource } from '../../shared/types'
 
 const useStyles = makeStyles({
   surface: {
@@ -29,10 +39,12 @@ const useStyles = makeStyles({
   titleRow: {
     display: 'flex',
     gap: '8px',
-    alignItems: 'flex-end'
+    alignItems: 'flex-end',
+    flexWrap: 'wrap'
   },
   titleInput: {
-    flex: 1
+    flex: 1,
+    minWidth: '220px'
   },
   /**
    * 语料文本框。
@@ -63,44 +75,111 @@ const useStyles = makeStyles({
 interface Props {
   open: boolean
   onClose: () => void
-  /** 确认。编辑已有语料时传入 id */
-  onConfirm: (title: string, content: string, editingId?: string) => void
+  /** 确认。编辑已有语料时传入 id 和当前标题来源 */
+  onConfirm: (
+    title: string,
+    content: string,
+    titleSource: TitleSource,
+    editingId?: string
+  ) => void
   /** 编辑已有语料时传入初始值 */
-  editing?: { id: string; title: string; content: string } | null
+  editing?: { id: string; title: string; titleSource: TitleSource; content: string } | null
 }
 
 export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.Element {
   const styles = useStyles()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const { generate, generating } = useTitle()
+  /** 标题来源：手填、AI 回填、还是没有 */
+  const [titleSource, setTitleSource] = useState<TitleSource>('none')
+  const { generate, generating, cancel } = useTitle()
+
+  /**
+   * 编辑上下文的令牌。
+   *
+   * 手动改标题/正文、关闭、换一份语料都会让它失效，
+   * 这样迟到的 AI 结果不会覆盖用户后来的输入，也不会写进另一份语料。
+   */
+  const titleStateRef = useRef<TitleRequestState>(createTitleState())
 
   // 打开时按编辑对象填充；新建时清空
   useEffect(() => {
     if (!open) return
+
+    const key = editing?.id ?? ''
+    // 换了一份语料（或新建）：在途的旧请求作废
+    const state = titleStateRef.current
+    if (state.editingKey !== key) {
+      titleStateRef.current = rebindTitleState(state, key)
+      cancel()
+    }
+
     if (editing) {
       setTitle(editing.title)
       setContent(editing.content)
+      setTitleSource(editing.titleSource)
     } else {
       setTitle('')
       setContent('')
+      setTitleSource('none')
     }
+    // cancel 是稳定引用，不参与依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing])
+
+  /** 关闭/取消：在途请求作废，避免关掉之后结果又写回来 */
+  const handleCancel = (): void => {
+    titleStateRef.current = rebindTitleState(
+      titleStateRef.current,
+      titleStateRef.current.editingKey
+    )
+    cancel()
+    onClose()
+  }
 
   const handleConfirm = (): void => {
     if (!content.trim()) return
-    onConfirm(title.trim(), content, editing?.id)
+    // 关窗之前同样让在途请求作废
+    titleStateRef.current = rebindTitleState(
+      titleStateRef.current,
+      titleStateRef.current.editingKey
+    )
+    cancel()
+    onConfirm(title.trim(), content, titleSource, editing?.id)
     onClose()
   }
 
-  const handleCancel = (): void => {
-    onClose()
+  /** 用户改标题：立刻记为手动来源，并让在途的 AI 结果作废 */
+  const handleTitleChange = (value: string): void => {
+    setTitle(value)
+    setTitleSource(titleSourceAfterEdit(value))
+    titleStateRef.current = touchTitleState(titleStateRef.current)
+    if (generating) cancel()
   }
 
-  /** 让 AI 起标题：用当前文本框里的内容 */
+  /** 用户改正文：标题的生成依据变了，在途结果作废 */
+  const handleContentChange = (value: string): void => {
+    setContent(value)
+    titleStateRef.current = touchTitleState(titleStateRef.current)
+    if (generating) cancel()
+  }
+
+  /**
+   * 让 AI 起标题：用当前文本框里的内容。
+   *
+   * 结果只在请求仍然有效时回填。每次点击都是一次新请求，
+   * 不会因为"曾经手改过"就永远不生成。
+   */
   const handleGenerateTitle = async (): Promise<void> => {
+    const { state, token } = beginTitleRequest(titleStateRef.current)
+    titleStateRef.current = state
+
     const result = await generate(content)
-    if (result) setTitle(result)
+    if (!result) return
+    if (!shouldApplyTitle(token, titleStateRef.current)) return
+
+    setTitle(result)
+    setTitleSource('ai')
   }
 
   const charCount = content.length
@@ -117,7 +196,7 @@ export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.
                 <Input
                   className={styles.titleInput}
                   value={title}
-                  onChange={(_, data) => setTitle(data.value)}
+                  onChange={(_, data) => handleTitleChange(data.value)}
                   placeholder="例如：客户口头反馈整理"
                 />
                 <Button
@@ -127,6 +206,15 @@ export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.
                 >
                   AI总结标题
                 </Button>
+                {generating && (
+                  <Button
+                    appearance="subtle"
+                    icon={<Dismiss16Regular />}
+                    onClick={cancel}
+                  >
+                    取消生成
+                  </Button>
+                )}
               </div>
             </Field>
 
@@ -134,7 +222,7 @@ export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.
               <textarea
                 className={styles.textarea}
                 value={content}
-                onChange={(event) => setContent(event.target.value)}
+                onChange={(event) => handleContentChange(event.target.value)}
                 placeholder="把大段文字粘贴到这里"
                 spellCheck={false}
               />

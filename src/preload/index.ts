@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
-import type { Draft, FileResource } from '../shared/types'
+import type { Draft, FileResource, TitleSource } from '../shared/types'
+import type { PromptLibraryItem } from '../shared/promptLibrary'
 import type { UsageInfo } from '../shared/sse'
 import type { LlmError } from '../shared/llmErrors'
 import type { CallKind } from '../main/llm'
@@ -70,6 +71,11 @@ export interface ProfilesView {
   currentId: string | null
   profiles: ProfileView[]
 }
+
+/** Prompt 库操作的统一结果。失败时 error 是给用户看的中文。 */
+export type PromptLibraryResult =
+  | { ok: true; items: PromptLibraryItem[] }
+  | { ok: false; error: string; items: [] }
 
 const api = {
   // ---------- 设置 ----------
@@ -249,6 +255,17 @@ const api = {
     ipcRenderer.invoke('styles:import-apply', items, overwrite) as Promise<{
       items: StyleItemView[]
     }>,
+
+  // ---------- 我的 Prompt 库 ----------
+  listPrompts: () => ipcRenderer.invoke('prompt-library:list') as Promise<PromptLibraryResult>,
+  savePrompt: (input: {
+    id: string
+    title: string
+    content: string
+    titleSource: TitleSource
+  }) => ipcRenderer.invoke('prompt-library:save', input) as Promise<PromptLibraryResult>,
+  deletePrompt: (id: string) =>
+    ipcRenderer.invoke('prompt-library:delete', id) as Promise<PromptLibraryResult>,
 
   // ---------- 语音输入 ----------
   getSpeechConfig: () =>

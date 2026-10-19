@@ -78,5 +78,18 @@ export const draftSchema = z.object({
    * 用户改过提示词后连续两次兜底，就提示他检查提示词。
    */
   fallbackStreak: z.number().int().min(0).default(0),
+  /**
+   * 本轮选中的 Prompt 库条目快照。旧草稿没有这个字段，缺省为 null。
+   * 这里放宽长度上限只做结构校验，真正的上限在保存库条目时检查。
+   */
+  promptSelection: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      content: z.string(),
+      mode: z.enum(['reference', 'template'])
+    })
+    .nullable()
+    .default(null),
   updatedAt: z.number()
 })

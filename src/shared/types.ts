@@ -1,3 +1,5 @@
+import type { PromptSelection } from './promptLibrary'
+
 /** 目标：最终提示词要交给谁 */
 export type Target = 'local' | 'web'
 
@@ -92,6 +94,13 @@ export interface Draft {
    * 用户改过提示词后连续两次兜底，就提示他检查提示词。
    */
   fallbackStreak: number
+  /**
+   * 本轮选择的「我的 Prompt 库」条目快照。
+   *
+   * 存的是快照而不是 id：库里的条目之后被编辑或删除，不能让已经恢复的
+   * 草稿悄悄变样。旧草稿没有这个字段时视为 null。
+   */
+  promptSelection: PromptSelection | null
   updatedAt: number
 }
 
@@ -126,6 +135,7 @@ export function createDraft(id: string): Draft {
     result: null,
     lastAction: null,
     fallbackStreak: 0,
+    promptSelection: null,
     updatedAt: Date.now()
   }
 }
