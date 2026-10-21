@@ -15,6 +15,13 @@ import {
   ZoomOut20Regular
 } from '@fluentui/react-icons'
 import type { Settings } from '../../../main/settings'
+import { useT } from '../../i18n'
+import { useStore } from '../../store'
+import {
+  TRANSLATION_LANGUAGES,
+  sanitizeTranslationTarget,
+  translationLanguageLabel
+} from '../../../shared/translationLanguages'
 
 const useStyles = makeStyles({
   section: {
@@ -58,23 +65,24 @@ interface Props {
   onNotice: (n: { text: string; kind: 'info' | 'warning' | 'success' } | null) => void
 }
 
-/** 主题取值的显示文字 */
-const THEME_LABELS: Record<'system' | 'light' | 'dark', string> = {
-  system: '跟随设备',
-  light: '浅色',
-  dark: '深色'
-}
-
 export function SettingsGeneral({ onNotice }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const uiLanguage = useStore((s) => s.uiLanguage)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [shortcutInput, setShortcutInput] = useState('')
+  const [customTarget, setCustomTarget] = useState(false)
+  const [targetInput, setTargetInput] = useState('')
+  const [targetError, setTargetError] = useState(false)
 
   useEffect(() => {
     void (async () => {
       const s = await window.preface.getSettings()
       setSettings(s)
       setShortcutInput(await window.preface.shortcutLabel(s.shortcut))
+      const isPreset = TRANSLATION_LANGUAGES.some((l) => l.id === s.translationTarget)
+      setCustomTarget(!isPreset)
+      setTargetInput(isPreset ? '' : s.translationTarget)
     })()
   }, [])
 
@@ -87,7 +95,7 @@ export function SettingsGeneral({ onNotice }: Props): JSX.Element {
     if (!result.ok) {
       onNotice({
         kind: 'warning',
-        text: '这个快捷键已经被其他程序占用了，请换一个。'
+        text: t('settings.general.shortcutTaken')
       })
       setSettings(result.settings)
       setShortcutInput(await window.preface.shortcutLabel(result.settings.shortcut))
@@ -96,6 +104,18 @@ export function SettingsGeneral({ onNotice }: Props): JSX.Element {
     setSettings(result.settings)
     // 广播出去，让主窗口跟着变（Token 用量这类显示开关）
     window.dispatchEvent(new Event('preface:settings-changed'))
+  }
+
+  /** 保存自定义翻译语言 */
+  const saveCustomTarget = (): void => {
+    const cleaned = sanitizeTranslationTarget(targetInput)
+    if (!targetInput.trim()) {
+      setTargetError(true)
+      return
+    }
+    setTargetError(false)
+    setTargetInput(cleaned)
+    void patch({ translationTarget: cleaned })
   }
 
   /**
@@ -125,9 +145,9 @@ export function SettingsGeneral({ onNotice }: Props): JSX.Element {
 
   return (
     <div className={styles.section}>
-      <div className={styles.sectionTitle}>通用</div>
+      <div className={styles.sectionTitle}>{t('settings.general.title')}</div>
 
-      <Field label="全局快捷键" hint="在输入框里按下想要的组合键，会自动填入。">
+      <Field label={t('settings.general.shortcut')} hint={t('settings.general.shortcutHint')}>
         <div className={styles.row}>
           <Input
             className={styles.grow}
@@ -160,62 +180,142 @@ export function SettingsGeneral({ onNotice }: Props): JSX.Element {
       </Field>
 
       <Switch
-        label="开机自启"
+        label={t('settings.general.autoLaunch')}
         checked={settings.autoLaunch}
         onChange={(_, d) => void patch({ autoLaunch: d.checked })}
       />
 
       <Switch
-        label="窗口置顶"
+        label={t('settings.general.alwaysOnTop')}
         checked={settings.alwaysOnTop}
         onChange={(_, d) => void patch({ alwaysOnTop: d.checked })}
       />
 
       <Field
-        label="界面缩放"
-        hint="整体放大或缩小界面。和浏览器的 Ctrl+加号/减号 效果一样。"
+        label={t('settings.general.zoom')}
+        hint={t('settings.general.zoomHint')}
       >
         <div className={styles.zoomRow}>
           <Button
             icon={<ZoomOut20Regular />}
             disabled={settings.zoom <= 0.7}
             onClick={() => void changeZoom(-0.1)}
-            aria-label="缩小"
+            aria-label={t('settings.general.zoomOut')}
           />
           <span className={styles.zoomValue}>{Math.round(settings.zoom * 100)}%</span>
           <Button
             icon={<ZoomIn20Regular />}
             disabled={settings.zoom >= 1.5}
             onClick={() => void changeZoom(0.1)}
-            aria-label="放大"
+            aria-label={t('settings.general.zoomIn')}
           />
           <Button
             icon={<ArrowReset20Regular />}
             disabled={settings.zoom === 1}
             onClick={() => void changeZoom(0)}
           >
-            恢复默认
+            {t('settings.general.resetDefault')}
           </Button>
         </div>
       </Field>
 
-      <Field label="深浅色模式">
+      <Field label={t('settings.general.theme')}>
         <Dropdown
           selectedOptions={[settings.theme]}
-          value={THEME_LABELS[settings.theme]}
+          value={
+            settings.theme === 'system'
+              ? t('settings.general.themeSystem')
+              : settings.theme === 'light'
+                ? t('settings.general.themeLight')
+                : t('settings.general.themeDark')
+          }
           onOptionSelect={(_, d) =>
             void changeTheme(d.optionValue as 'system' | 'light' | 'dark')
           }
         >
-          <Option value="system">跟随设备</Option>
-          <Option value="light">浅色</Option>
-          <Option value="dark">深色</Option>
+          <Option value="system">{t('settings.general.themeSystem')}</Option>
+          <Option value="light">{t('settings.general.themeLight')}</Option>
+          <Option value="dark">{t('settings.general.themeDark')}</Option>
         </Dropdown>
       </Field>
 
-      <div className={styles.sectionTitle}>默认值</div>
+      <div className={styles.sectionTitle}>{t('settings.general.language')}</div>
 
-      <Field label="最多提问数" hint="范围 0 到 5。填 0 表示从不提问，直接出结果。">
+      <Field label={t('settings.general.uiLanguage')}>
+        <Dropdown
+          selectedOptions={[settings.uiLanguage]}
+          value={settings.uiLanguage === 'en' ? t('language.en') : t('language.zh')}
+          onOptionSelect={(_, d) =>
+            void patch({ uiLanguage: d.optionValue as 'zh' | 'en' })
+          }
+        >
+          <Option value="zh">{t('language.zh')}</Option>
+          <Option value="en">{t('language.en')}</Option>
+        </Dropdown>
+      </Field>
+
+      <Field
+        label={t('settings.general.translationTarget')}
+        hint={t('settings.general.translationHint')}
+        validationMessage={
+          targetError ? t('settings.general.translationEmpty') : undefined
+        }
+        validationState={targetError ? 'error' : 'none'}
+      >
+        <div className={styles.section}>
+          <Dropdown
+            selectedOptions={[
+              customTarget ? '__custom' : settings.translationTarget
+            ]}
+            value={
+              customTarget
+                ? t('settings.general.translationCustom')
+                : translationLanguageLabel(settings.translationTarget, uiLanguage)
+            }
+            onOptionSelect={(_, d) => {
+              const value = d.optionValue
+              if (!value) return
+              if (value === '__custom') {
+                setCustomTarget(true)
+                setTargetError(false)
+                return
+              }
+              setCustomTarget(false)
+              setTargetError(false)
+              void patch({ translationTarget: value })
+            }}
+          >
+            {TRANSLATION_LANGUAGES.map((language) => (
+              <Option key={language.id} value={language.id}>
+                {translationLanguageLabel(language.id, uiLanguage)}
+              </Option>
+            ))}
+            <Option value="__custom">{t('settings.general.translationCustom')}</Option>
+          </Dropdown>
+
+          {customTarget && (
+            <Input
+              value={targetInput}
+              placeholder={t('settings.general.translationPlaceholder')}
+              onChange={(_, d) => {
+                setTargetInput(d.value)
+                setTargetError(false)
+              }}
+              onBlur={saveCustomTarget}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') saveCustomTarget()
+              }}
+            />
+          )}
+        </div>
+      </Field>
+
+      <div className={styles.sectionTitle}>{t('settings.general.defaults')}</div>
+
+      <Field
+        label={t('settings.general.maxQuestions')}
+        hint={t('settings.general.maxQuestionsHint')}
+      >
         <Input
           type="number"
           value={String(settings.maxQuestions)}
@@ -227,29 +327,29 @@ export function SettingsGeneral({ onNotice }: Props): JSX.Element {
       </Field>
 
       <Switch
-        label="整理也参考风格样本"
+        label={t('settings.general.tidyStyleSamples')}
         checked={settings.tidyUseStyleSamples}
         onChange={(_, d) => void patch({ tidyUseStyleSamples: d.checked })}
       />
 
       <Switch
-        label="显示 Token 用量"
+        label={t('settings.general.showTokenUsage')}
         checked={settings.showTokenUsage}
         onChange={(_, d) => void patch({ showTokenUsage: d.checked })}
       />
 
-      <div className={styles.sectionTitle}>高级</div>
+      <div className={styles.sectionTitle}>{t('settings.general.advanced')}</div>
 
-      <Field hint="打开后会记录请求内容，方便排查问题。日志里的 API Key 一律打码。">
+      <Field hint={t('settings.general.debugLogHint')}>
         <Switch
-          label="调试日志"
+          label={t('settings.general.debugLog')}
           checked={settings.debugLog}
           onChange={(_, d) => void patch({ debugLog: d.checked })}
         />
       </Field>
 
       <div className={styles.hint}>
-        日志文件位置：
+        {t('settings.general.logLocation')}
         <br />
         <code>{settings ? '' : ''}</code>
         <LogPath />

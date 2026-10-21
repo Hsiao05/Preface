@@ -70,7 +70,7 @@ describe('提示语指向正确的入口', () => {
   })
 
   it('指向「设置 → 找回之前的内容」', () => {
-    expect(read('src/renderer/useDraft.ts')).toContain('设置 → 找回之前的内容')
+    expect(read('src/renderer/useDraft.ts')).toContain("'notice.previousAvailable'")
   })
 })
 
@@ -104,7 +104,7 @@ describe('澄清面板的问题卡片不会被截断', () => {
   })
 
   it('每题最后两个固定选项存在', () => {
-    expect(source).toContain('让 AI 自己判断')
-    expect(source).toContain('写下自己的答案')
+    expect(source).toContain("t('clarify.delegate')")
+    expect(source).toContain("t('clarify.ownAnswer')")
   })
 })

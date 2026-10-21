@@ -13,6 +13,7 @@ import {
 } from '@fluentui/react-components'
 import { Dismiss12Regular, Mic16Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import { countRef } from '../../shared/refs'
 import { isAudioFileExt } from '../../shared/speech'
 import { AudioTranscribeDialog } from './AudioTranscribeDialog'
@@ -98,6 +99,7 @@ interface PendingDelete {
 
 export function ResourceBar(): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const { draft, missingFiles, removeFile, removeCorpus } = useStore()
   const [pending, setPending] = useState<PendingDelete | null>(null)
   // 正在转录的音频文件。为 null 表示窗口关闭。
@@ -141,9 +143,7 @@ export function ResourceBar(): JSX.Element {
     <>
       <div className={styles.bar}>
         {!hasResources && (
-          <span className={styles.empty}>
-            把文件拖进窗口，或点上面的「上传文件」「粘贴语料」
-          </span>
+          <span className={styles.empty}>{t('resource.empty')}</span>
         )}
 
         {draft.files.map((file) => {
@@ -151,10 +151,10 @@ export function ResourceBar(): JSX.Element {
           // 音频文件可以点击打开转录窗口；其他文件保持原来的纯拖动行为
           const audio = !missing && isAudioFileExt(file.ext)
           const tooltip = missing
-            ? '文件已移动或删除'
+            ? t('resource.missingTooltip')
             : audio
-              ? `${file.path}（点击转录，或拖到原文里引用）`
-              : `${file.path}（可拖到原文里引用）`
+              ? t('resource.audioTooltip', { path: file.path })
+              : t('resource.fileTooltip', { path: file.path })
 
           return (
             <Tooltip key={file.id} content={tooltip} relationship="label">
@@ -181,14 +181,14 @@ export function ResourceBar(): JSX.Element {
                 {audio && <Mic16Regular className={styles.micMark} />}
                 <span className={styles.id}>{file.id}</span>
                 <span>{file.name}</span>
-                {missing && <span className={styles.missingMark}>（已丢失）</span>}
+                {missing && <span className={styles.missingMark}>{t('resource.missing')}</span>}
                 <Button
                   className={styles.remove}
                   appearance="transparent"
                   size="small"
                   draggable={false}
                   icon={<Dismiss12Regular />}
-                  aria-label={`删除 ${file.id}`}
+                  aria-label={t('resource.deleteAria', { id: file.id })}
                   onClick={(event) => {
                     // 【必须阻止冒泡】音频标签外层的 onClick 是"打开转录窗口"，
                     // 删除按钮在它里面。不拦住的话，点叉会一边删一边把转录窗口弹出来。
@@ -204,7 +204,7 @@ export function ResourceBar(): JSX.Element {
         {draft.corpora.map((corpus) => (
           <Tooltip
             key={corpus.id}
-            content={`${corpus.chars} 字。点击编辑，或拖到原文里引用。`}
+            content={t('resource.corpusTooltip', { count: corpus.chars })}
             relationship="label"
           >
             <span
@@ -218,19 +218,23 @@ export function ResourceBar(): JSX.Element {
               }
             >
               <span className={styles.id}>{corpus.id}</span>
-              <span>{corpus.title.trim() || '未命名语料'}</span>
+              <span>{corpus.title.trim() || t('resource.untitledCorpus')}</span>
               <Button
                 className={styles.remove}
                 appearance="transparent"
                 size="small"
                 draggable={false}
                 icon={<Dismiss12Regular />}
-                aria-label={`删除 ${corpus.id}`}
+                aria-label={t('resource.deleteAria', { id: corpus.id })}
                 onClick={(event) => {
                   // 【必须阻止冒泡】语料标签外层的 onClick 是"打开编辑窗口"，
                   // 删除按钮在它里面。不拦住的话，点叉会一边删一边把编辑窗口弹出来。
                   event.stopPropagation()
-                  requestDelete(corpus.id, corpus.title || '未命名语料', 'corpus')
+                  requestDelete(
+                    corpus.id,
+                    corpus.title || t('resource.untitledCorpus'),
+                    'corpus'
+                  )
                 }}
               />
             </span>
@@ -241,18 +245,20 @@ export function ResourceBar(): JSX.Element {
       <Dialog open={pending !== null} onOpenChange={(_, data) => !data.open && setPending(null)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>删除资料</DialogTitle>
+            <DialogTitle>{t('resource.deleteTitle')}</DialogTitle>
             <DialogContent className={styles.dialogContent}>
-              「{pending?.label}」（{pending?.id}）在原文里被引用了 {pending?.count} 次。
-              <br />
-              删除后，这些引用会显示为失效引用。
+              {t('resource.deleteBody', {
+                label: pending?.label ?? '',
+                id: pending?.id ?? '',
+                count: pending?.count ?? 0
+              })}
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setPending(null)}>
-                取消
+                {t('common.cancel')}
               </Button>
               <Button appearance="primary" onClick={confirmDelete}>
-                删除
+                {t('common.delete')}
               </Button>
             </DialogActions>
           </DialogBody>

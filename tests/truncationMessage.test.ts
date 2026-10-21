@@ -27,7 +27,7 @@ describe('输出被截断时的提示', () => {
     expect(message).toContain('截断')
     expect(message).toContain('推理')
     expect(message).toContain('deepseek-chat')
-    expect(message).toContain('2800')
+    expect(message).toMatch(/2,?800/)
   })
 
   it('普通模型截断：建议调大最大输出长度', () => {

@@ -1,5 +1,6 @@
 import { httpFetch } from '../http'
 import { describeHttpError, describeNetworkError } from '../../shared/llmErrors'
+import { getUiLanguage, mainT } from '../i18n'
 import { cleanTranscript, type SpeechConfig } from '../../shared/speech'
 import { SpeechError } from './errors'
 
@@ -53,14 +54,14 @@ export async function transcribeViaTranscriptions(
       signal
     })
   } catch (error) {
-    if (signal?.aborted) throw new SpeechError('识别已取消')
-    const info = describeNetworkError(error)
+    if (signal?.aborted) throw new SpeechError(mainT('speech.cancelled'))
+    const info = describeNetworkError(error, getUiLanguage())
     throw new SpeechError(info.message, info.suggestion)
   }
 
   if (!response.ok) {
     const body = await safeText(response)
-    const info = describeHttpError(response.status, body)
+    const info = describeHttpError(response.status, body, getUiLanguage())
     throw new SpeechError(info.message, info.suggestion, info.status)
   }
 
@@ -68,7 +69,7 @@ export async function transcribeViaTranscriptions(
   try {
     json = await response.json()
   } catch {
-    throw new SpeechError('服务商返回的内容看不懂', '请检查 Base URL 是否指向正确的服务。')
+    throw new SpeechError(mainT('speech.badResponse'), mainT('speech.badResponseHint'))
   }
 
   const obj = json as Record<string, unknown>

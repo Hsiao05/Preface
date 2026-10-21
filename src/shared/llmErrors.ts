@@ -1,7 +1,9 @@
 /**
- * 把各种失败情况翻译成中文说明和建议。
- * 文档第五节：模型请求出错时，用中文说明原因和建议，不能只显示英文报错。
+ * 把各种失败情况翻译成用户能看懂的说明和建议。
+ * 文档第五节：模型请求出错时，要说明原因和建议，不能只显示英文报错。
  */
+
+import { translate, type MessageKey, type UiLanguage } from './i18n'
 
 export interface LlmError {
   /** 简短的原因 */
@@ -12,50 +14,66 @@ export interface LlmError {
   status?: number
 }
 
-export function describeHttpError(status: number, body?: string): LlmError {
+function t(
+  language: UiLanguage,
+  key: MessageKey,
+  params?: Record<string, string | number>
+): string {
+  return translate(language, key, params)
+}
+
+export function describeHttpError(
+  status: number,
+  body?: string,
+  language: UiLanguage = 'zh'
+): LlmError {
   // 服务商返回的错误正文里可能有关键信息，但不要整段展示
   const detail = extractDetail(body)
 
   switch (true) {
     case status === 401 || status === 403:
       return {
-        message: 'API Key 不正确或没有权限',
-        suggestion: '请到设置里检查 API Key 是否填对、是否已过期。',
+        message: t(language, 'error.http401'),
+        suggestion: t(language, 'error.http401Hint'),
         status
       }
 
     case status === 404:
       return {
-        message: '地址或模型名可能有误',
-        suggestion: '请检查 Base URL 和模型名。有些服务需要在地址后面加 /v1。',
+        message: t(language, 'error.http404'),
+        suggestion: t(language, 'error.http404Hint'),
         status
       }
 
     case status === 429:
       return {
-        message: '请求太频繁或额度不足',
-        suggestion: '请稍后再试，或检查账户余额。',
+        message: t(language, 'error.http429'),
+        suggestion: t(language, 'error.http429Hint'),
         status
       }
 
     case status === 400:
       return {
-        message: detail ? `请求被拒绝：${detail}` : '请求格式有问题',
-        suggestion: '请检查模型名是否正确，或换一个模型试试。',
+        message: detail
+          ? t(language, 'error.rejected', { detail })
+          : t(language, 'error.badRequest'),
+        suggestion: t(language, 'error.badRequestHint'),
         status
       }
 
     case status >= 500:
       return {
-        message: '服务商暂时出错',
-        suggestion: '这不是你的问题，请稍后再试。',
+        message: t(language, 'error.server'),
+        suggestion: t(language, 'error.serverHint'),
         status
       }
 
     default:
       return {
-        message: detail ? `请求失败（${status}）：${detail}` : `请求失败（${status}）`,
-        suggestion: '请检查设置里的地址和模型名。',
+        message: detail
+          ? t(language, 'error.httpOther', { status, detail })
+          : t(language, 'error.httpOtherNoDetail', { status }),
+        suggestion: t(language, 'error.httpOtherHint'),
         status
       }
   }
@@ -85,18 +103,21 @@ function truncate(text: string, max = 120): string {
 }
 
 /** 网络层面的错误（超时、连不上等） */
-export function describeNetworkError(error: unknown): LlmError {
+export function describeNetworkError(
+  error: unknown,
+  language: UiLanguage = 'zh'
+): LlmError {
   const raw = error instanceof Error ? error.message : String(error)
   const lower = raw.toLowerCase()
 
   if (lower.includes('abort') || lower.includes('canceled') || lower.includes('cancelled')) {
-    return { message: '请求已取消' }
+    return { message: t(language, 'error.cancelled') }
   }
 
   if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('etimedout')) {
     return {
-      message: '请求超时',
-      suggestion: '服务商响应太慢。可以稍后再试，或在设置里把超时时间调长。'
+      message: t(language, 'error.timeout'),
+      suggestion: t(language, 'error.timeoutHint')
     }
   }
 
@@ -108,13 +129,13 @@ export function describeNetworkError(error: unknown): LlmError {
     lower.includes('fetch failed')
   ) {
     return {
-      message: '网络连接失败',
-      suggestion: '请检查网络，或者代理设置是否正确。'
+      message: t(language, 'error.network'),
+      suggestion: t(language, 'error.networkHint')
     }
   }
 
   return {
-    message: `请求失败：${raw}`,
-    suggestion: '请检查设置里的地址、模型名和网络连接。'
+    message: t(language, 'error.generic', { message: raw }),
+    suggestion: t(language, 'error.genericHint')
   }
 }

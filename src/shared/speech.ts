@@ -6,6 +6,8 @@
  * 满足同样接口的引擎，上层代码不用改。
  */
 
+import type { MessageKey } from './i18n/catalog'
+
 /** 接口类型 */
 export type SpeechApiType = 'transcriptions' | 'chat-audio'
 
@@ -16,6 +18,8 @@ export type SpeechLanguage = 'auto' | 'zh' | 'en'
 export interface SpeechPreset {
   id: string
   name: string
+  /** 界面上的显示名；存储里仍保留 name 作为回退 */
+  nameKey: MessageKey
   baseUrl: string
   model: string
   apiType: SpeechApiType
@@ -26,6 +30,7 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
   {
     id: 'siliconflow',
     name: '硅基流动（免费）',
+    nameKey: 'builtin.speech.siliconflow',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: 'FunAudioLLM/SenseVoiceSmall',
     apiType: 'transcriptions'
@@ -33,6 +38,7 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
   {
     id: 'dashscope',
     name: '阿里云百炼',
+    nameKey: 'builtin.speech.dashscope',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen3-asr-flash',
     apiType: 'chat-audio'
@@ -40,6 +46,7 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
   {
     id: 'groq',
     name: 'Groq',
+    nameKey: 'builtin.speech.groq',
     baseUrl: 'https://api.groq.com/openai/v1',
     model: 'whisper-large-v3-turbo',
     apiType: 'transcriptions'
@@ -47,6 +54,7 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
   {
     id: 'openai',
     name: 'OpenAI',
+    nameKey: 'builtin.speech.openai',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini-transcribe',
     apiType: 'transcriptions'
@@ -54,6 +62,7 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
   {
     id: 'custom',
     name: '自定义',
+    nameKey: 'builtin.speech.custom',
     baseUrl: '',
     model: '',
     apiType: 'transcriptions'
@@ -63,16 +72,26 @@ export const SPEECH_PRESETS: SpeechPreset[] = [
 export const DEFAULT_SPEECH_PRESET = 'siliconflow'
 
 /** 语言选项 */
-export const SPEECH_LANGUAGES: Array<{ value: SpeechLanguage; label: string }> = [
-  { value: 'auto', label: '自动' },
-  { value: 'zh', label: '中文' },
-  { value: 'en', label: '英文' }
+export const SPEECH_LANGUAGES: Array<{
+  value: SpeechLanguage
+  label: string
+  labelKey: MessageKey
+}> = [
+  { value: 'auto', label: '自动', labelKey: 'speech.lang.auto' },
+  { value: 'zh', label: '中文', labelKey: 'speech.lang.zh' },
+  { value: 'en', label: '英文', labelKey: 'speech.lang.en' }
 ]
 
 /** 接口类型的显示名 */
 export const API_TYPE_LABELS: Record<SpeechApiType, string> = {
   transcriptions: '转写接口',
   'chat-audio': '聊天接口'
+}
+
+/** 接口类型显示名对应的词条 */
+export const API_TYPE_KEYS: Record<SpeechApiType, MessageKey> = {
+  transcriptions: 'speech.apiType.transcriptions',
+  'chat-audio': 'speech.apiType.chat-audio'
 }
 
 /** 识别配置 */

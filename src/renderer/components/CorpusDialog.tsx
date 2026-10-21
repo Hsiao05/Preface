@@ -15,6 +15,8 @@ import {
 } from '@fluentui/react-components'
 import { Dismiss16Regular, Sparkle16Regular } from '@fluentui/react-icons'
 import { useTitle } from '../useTitle'
+import { useT, useUiLanguage } from '../i18n'
+import { formatNumber } from '../format'
 import {
   beginTitleRequest,
   createTitleState,
@@ -88,6 +90,8 @@ interface Props {
 
 export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const language = useUiLanguage()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   /** 标题来源：手填、AI 回填、还是没有 */
@@ -189,22 +193,24 @@ export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.
     <Dialog open={open} onOpenChange={(_, data) => !data.open && handleCancel()}>
       <DialogSurface className={styles.surface}>
         <DialogBody>
-          <DialogTitle>{isEditing ? `编辑语料 ${editing?.id}` : '粘贴语料'}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? t('corpus.editTitle', { id: editing?.id ?? '' }) : t('corpus.createTitle')}
+          </DialogTitle>
           <DialogContent className={styles.content}>
-            <Field label="标题（可以不填，之后可以让 AI 起标题）">
+            <Field label={t('corpus.titleLabel')}>
               <div className={styles.titleRow}>
                 <Input
                   className={styles.titleInput}
                   value={title}
                   onChange={(_, data) => handleTitleChange(data.value)}
-                  placeholder="例如：客户口头反馈整理"
+                  placeholder={t('corpus.titlePlaceholder')}
                 />
                 <Button
                   icon={generating ? <Spinner size="tiny" /> : <Sparkle16Regular />}
                   disabled={generating || !content.trim()}
                   onClick={() => void handleGenerateTitle()}
                 >
-                  AI总结标题
+                  {t('corpus.generateTitle')}
                 </Button>
                 {generating && (
                   <Button
@@ -212,31 +218,33 @@ export function CorpusDialog({ open, onClose, onConfirm, editing }: Props): JSX.
                     icon={<Dismiss16Regular />}
                     onClick={cancel}
                   >
-                    取消生成
+                    {t('corpus.cancelGenerate')}
                   </Button>
                 )}
               </div>
             </Field>
 
-            <Field label="内容">
+            <Field label={t('corpus.contentLabel')}>
               <textarea
                 className={styles.textarea}
                 value={content}
                 onChange={(event) => handleContentChange(event.target.value)}
-                placeholder="把大段文字粘贴到这里"
+                placeholder={t('corpus.contentPlaceholder')}
                 spellCheck={false}
               />
             </Field>
 
-            <div className={styles.hint}>已输入 {charCount.toLocaleString('zh-CN')} 字</div>
+            <div className={styles.hint}>
+              {t('corpus.charCount', { count: formatNumber(charCount, language) })}
+            </div>
           </DialogContent>
 
           <DialogActions>
             <Button appearance="secondary" onClick={handleCancel}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button appearance="primary" onClick={handleConfirm} disabled={!content.trim()}>
-              {isEditing ? '保存' : '添加'}
+              {isEditing ? t('common.save') : t('corpus.add')}
             </Button>
           </DialogActions>
         </DialogBody>

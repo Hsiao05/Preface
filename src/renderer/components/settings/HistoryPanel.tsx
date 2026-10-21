@@ -17,6 +17,9 @@ import {
 } from '@fluentui/react-components'
 import { ArrowUndo20Regular, Delete20Regular } from '@fluentui/react-icons'
 import { useStore } from '../../store'
+import { useT, useUiLanguage } from '../../i18n'
+import { formatNumber } from '../../format'
+import type { TFunction, UiLanguage } from '../../../shared/i18n'
 import type { SnapshotSummary } from '../../../preload/index'
 
 /**
@@ -94,42 +97,40 @@ const useStyles = makeStyles({
 })
 
 /** 保留时长选项 */
-const RETENTION_CHOICES: Array<{ value: number; label: string }> = [
-  { value: 10, label: '10 分钟' },
-  { value: 30, label: '30 分钟' },
-  { value: 60, label: '1 小时' },
-  { value: 120, label: '2 小时' },
-  { value: 300, label: '5 小时' },
-  { value: 720, label: '12 小时' },
-  { value: 1440, label: '24 小时' },
-  { value: 0, label: '永不删除' }
-]
+const RETENTION_CHOICES: number[] = [10, 30, 60, 120, 300, 720, 1440, 0]
 
-function retentionLabel(minutes: number): string {
-  return RETENTION_CHOICES.find((c) => c.value === minutes)?.label ?? `${minutes} 分钟`
+function retentionLabel(minutes: number, t: TFunction, language: UiLanguage): string {
+  if (minutes === 0) return t('history.never')
+  return minutes < 60
+    ? t('history.durationMinutes', { count: formatNumber(minutes, language) })
+    : t('history.durationHours', { count: formatNumber(minutes / 60, language) })
 }
 
 /** 把时间戳显示成"x 分钟前" */
-function timeAgo(timestamp: number): string {
+function timeAgo(timestamp: number, language: UiLanguage, justNow: string): string {
   if (!timestamp) return ''
   const diff = Date.now() - timestamp
   const minutes = Math.floor(diff / 60000)
 
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
+  if (minutes < 1) return justNow
+
+  const rtf = new Intl.RelativeTimeFormat(language === 'en' ? 'en' : 'zh-CN', {
+    numeric: 'auto'
+  })
+  if (minutes < 60) return rtf.format(-minutes, 'minute')
 
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
+  if (hours < 24) return rtf.format(-hours, 'hour')
 
   const days = Math.floor(hours / 24)
-  return `${days} 天前`
+  return rtf.format(-days, 'day')
 }
 
 /** 保存原因的显示文字 */
-function reasonLabel(reason: SnapshotSummary['reason']): string {
-  if (reason === 'copied') return '复制时保存'
-  if (reason === 'cleared') return '清空时保存'
-  return '手动保存'
+function reasonLabel(reason: SnapshotSummary['reason'], t: TFunction): string {
+  if (reason === 'copied') return t('history.savedCopied')
+  if (reason === 'cleared') return t('history.savedCleared')
+  return t('history.savedManual')
 }
 
 interface Props {
@@ -138,6 +139,8 @@ interface Props {
 
 export function HistoryPanel({ onNotice }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const language = useUiLanguage()
   const [snapshots, setSnapshots] = useState<SnapshotSummary[] | null>(null)
   const [retention, setRetention] = useState<number>(1440)
   const [clearAllOpen, setClearAllOpen] = useState(false)
@@ -165,8 +168,8 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
       kind: 'success',
       text:
         minutes === 0
-          ? '已设为永不删除。'
-          : `已设为保留 ${retentionLabel(minutes)}，更早的已清理。`
+          ? t('history.setNever')
+          : t('history.setRetention', { duration: retentionLabel(minutes, t, language) })
     })
   }
 
@@ -174,7 +177,7 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
   const restore = async (id: string): Promise<void> => {
     const draft = await window.preface.loadSnapshot(id)
     if (!draft) {
-      onNotice({ kind: 'warning', text: '这份记录读不出来了，可能已经损坏。' })
+      onNotice({ kind: 'warning', text: t('history.corrupt') })
       await reload()
       return
     }
@@ -183,15 +186,15 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
     // 恢复历史 = 换草稿：旧会话作废，会话回到该记录自己的状态
     state.replaceDraft(draft)
     state.setActiveTab('source')
-    state.setNotice({ kind: 'success', text: '已恢复。' })
-    onNotice({ kind: 'success', text: '已恢复到主窗口，关掉设置就能看到。' })
+    state.setNotice({ kind: 'success', text: t('history.restored') })
+    onNotice({ kind: 'success', text: t('history.restoredHint') })
   }
 
   /** 删掉某一版 */
   const remove = async (id: string): Promise<void> => {
     await window.preface.deleteSnapshot(id)
     await reload()
-    onNotice({ kind: 'info', text: '已删除这份记录。' })
+    onNotice({ kind: 'info', text: t('history.deleted') })
   }
 
   /** 清空全部 */
@@ -199,34 +202,35 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
     const count = await window.preface.clearAllSnapshots()
     setClearAllOpen(false)
     await reload()
-    onNotice({ kind: 'success', text: `已清空 ${count} 份记录。` })
+    onNotice({
+      kind: 'success',
+      text: t('history.cleared', { count: formatNumber(count, language) })
+    })
   }
 
   return (
     <div className={styles.section}>
-      <div className={styles.hint}>
-        每次复制成功或点一键清空时，都会自动存一份。恢复后内容会直接进主窗口，替换当前草稿。
-      </div>
+      <div className={styles.hint}>{t('history.intro')}</div>
 
-      <Field label="保留时长" hint="超过这个时间的记录会自动删除。">
+      <Field label={t('history.retention')} hint={t('history.retentionHint')}>
         <Dropdown
-          value={retentionLabel(retention)}
+          value={retentionLabel(retention, t, language)}
           selectedOptions={[String(retention)]}
           onOptionSelect={(_, d) => void changeRetention(Number(d.optionValue))}
         >
-          {RETENTION_CHOICES.map((choice) => (
-            <Option key={choice.value} value={String(choice.value)}>
-              {choice.label}
+          {RETENTION_CHOICES.map((minutes) => (
+            <Option key={minutes} value={String(minutes)}>
+              {retentionLabel(minutes, t, language)}
             </Option>
           ))}
         </Dropdown>
       </Field>
 
       {snapshots === null ? (
-        <Spinner label="正在读取" />
+        <Spinner label={t('history.loading')} />
       ) : snapshots.length === 0 ? (
         <div className={styles.list}>
-          <div className={styles.empty}>还没有保存过记录。</div>
+          <div className={styles.empty}>{t('history.empty')}</div>
         </div>
       ) : (
         <div className={styles.list}>
@@ -234,14 +238,21 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
             <div key={snapshot.id} className={styles.item}>
               <div className={styles.itemMain}>
                 <Text className={styles.preview}>
-                  {snapshot.preview || '（没有原文）'}
+                  {snapshot.preview || t('history.noSource')}
                   {snapshot.intentChars > 60 ? '…' : ''}
                 </Text>
                 <span className={styles.meta}>
-                  {timeAgo(snapshot.savedAt)} · {reasonLabel(snapshot.reason)}
-                  {snapshot.fileCount > 0 && ` · ${snapshot.fileCount} 个文件`}
-                  {snapshot.corpusCount > 0 && ` · ${snapshot.corpusCount} 个语料`}
-                  {snapshot.hasResult && ' · 有优化结果'}
+                  {timeAgo(snapshot.savedAt, language, t('history.justNow'))} ·{' '}
+                  {reasonLabel(snapshot.reason, t)}
+                  {snapshot.fileCount > 0 &&
+                    ` · ${t('history.files', {
+                      count: formatNumber(snapshot.fileCount, language)
+                    })}`}
+                  {snapshot.corpusCount > 0 &&
+                    ` · ${t('history.corpora', {
+                      count: formatNumber(snapshot.corpusCount, language)
+                    })}`}
+                  {snapshot.hasResult && ` · ${t('history.hasResult')}`}
                 </span>
               </div>
 
@@ -251,13 +262,13 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
                 icon={<ArrowUndo20Regular />}
                 onClick={() => void restore(snapshot.id)}
               >
-                恢复
+                {t('history.restore')}
               </Button>
               <Button
                 size="small"
                 appearance="subtle"
                 icon={<Delete20Regular />}
-                aria-label="删除这份记录"
+                aria-label={t('history.deleteAria')}
                 onClick={() => void remove(snapshot.id)}
               />
             </div>
@@ -273,23 +284,25 @@ export function HistoryPanel({ onNotice }: Props): JSX.Element {
           disabled={!snapshots || snapshots.length === 0}
           onClick={() => setClearAllOpen(true)}
         >
-          清除所有缓存
+          {t('history.clearAll')}
         </Button>
       </div>
 
       <Dialog open={clearAllOpen} onOpenChange={(_, d) => !d.open && setClearAllOpen(false)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>清除所有缓存</DialogTitle>
+            <DialogTitle>{t('history.clearAll')}</DialogTitle>
             <DialogContent>
-              会删掉全部 {snapshots?.length ?? 0} 份记录，删了找不回来。确定吗？
+              {t('history.clearAllBody', {
+                count: formatNumber(snapshots?.length ?? 0, language)
+              })}
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setClearAllOpen(false)}>
-                取消
+                {t('common.cancel')}
               </Button>
               <Button appearance="primary" onClick={() => void clearAll()}>
-                清除
+                {t('history.clear')}
               </Button>
             </DialogActions>
           </DialogBody>

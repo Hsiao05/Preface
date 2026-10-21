@@ -9,6 +9,8 @@
  * 之间完全相同，最容易命中服务商的前缀缓存。
  */
 
+import type { MessageKey } from '../i18n/catalog'
+
 /** 块 1：角色与任务 */
 export const BLOCK_ROLE = `你是「序」的提示词优化器。用户会给你一段准备发给 AI Agent 的需求（可能口语、零散）和资料清单。先判断需求是否清楚：清楚就直接改写成一段好的提示词；如果有会明显影响结果的关键点没说清，就先提问。
 模式为"自动"时由你选择：任务有多个步骤或交付物、涉及三份及以上资料、约束很多，或者包含几件不同的事，用 Markdown 模式；否则用简单模式；拿不准时选简单模式。`
@@ -72,10 +74,10 @@ export const BUILTIN_BLOCKS = {
 export type BlockId = keyof typeof BUILTIN_BLOCKS
 
 /** 块的显示名称与顺序 */
-export const BLOCK_META: Array<{ id: BlockId; name: string; locked: boolean }> = [
-  { id: 'role', name: '角色与任务', locked: false },
-  { id: 'rules', name: '改写规则', locked: false },
-  { id: 'simple', name: '简单模式写法', locked: false },
-  { id: 'markdown', name: 'Markdown 模式写法', locked: false },
-  { id: 'protocol', name: '输出协议', locked: true }
+export const BLOCK_META: Array<{ id: BlockId; name: string; nameKey: MessageKey; locked: boolean }> = [
+  { id: 'role', name: '角色与任务', nameKey: 'builtin.block.role', locked: false },
+  { id: 'rules', name: '改写规则', nameKey: 'builtin.block.rules', locked: false },
+  { id: 'simple', name: '简单模式写法', nameKey: 'builtin.block.simple', locked: false },
+  { id: 'markdown', name: 'Markdown 模式写法', nameKey: 'builtin.block.markdown', locked: false },
+  { id: 'protocol', name: '输出协议', nameKey: 'builtin.block.protocol', locked: true }
 ]

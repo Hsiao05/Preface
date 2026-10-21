@@ -13,6 +13,7 @@ import {
 import { ArrowDownload20Regular, Folder20Regular } from '@fluentui/react-icons'
 import type { FileResource } from '../../shared/types'
 import { formatSize } from '../format'
+import { useT } from '../i18n'
 
 const useStyles = makeStyles({
   content: {
@@ -95,6 +96,7 @@ interface Props {
 
 export function UploadListDialog({ open, files, onClose }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
 
   const dragOut = (paths: string[]): void => {
     void window.preface.startDrag(paths)
@@ -127,12 +129,9 @@ export function UploadListDialog({ open, files, onClose }: Props): JSX.Element {
     <Dialog open={open} onOpenChange={(_, data) => !data.open && onClose()}>
       <DialogSurface>
         <DialogBody>
-          <DialogTitle>还需要上传的文件</DialogTitle>
+          <DialogTitle>{t('upload.title')}</DialogTitle>
           <DialogContent className={styles.content}>
-            <div className={styles.hint}>
-              把下面的文件拖进网页的附件区。要一次拖出全部，就按住下面的「全部拖出」拖过去。
-              也可以点「在文件夹中显示」，再手动上传。
-            </div>
+            <div className={styles.hint}>{t('upload.hint')}</div>
 
             {files.map((file) => (
               <div
@@ -151,7 +150,7 @@ export function UploadListDialog({ open, files, onClose }: Props): JSX.Element {
                   icon={<Folder20Regular />}
                   onClick={() => void window.preface.showInFolder(file.path)}
                 >
-                  在文件夹中显示
+                  {t('upload.showInFolder')}
                 </Button>
               </div>
             ))}
@@ -174,10 +173,10 @@ export function UploadListDialog({ open, files, onClose }: Props): JSX.Element {
               onDragStart={(event) => beginDragOut(event, files.map((f) => f.path))}
             >
               <ArrowDownload20Regular />
-              <span>全部拖出</span>
+              <span>{t('upload.dragAll')}</span>
             </div>
             <Button appearance="primary" onClick={onClose}>
-              知道了
+              {t('upload.gotIt')}
             </Button>
           </DialogActions>
         </DialogBody>

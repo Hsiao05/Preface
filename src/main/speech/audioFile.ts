@@ -7,6 +7,7 @@ import {
   type SpeechConfig
 } from '../../shared/speech'
 import { log } from '../logger'
+import { mainT } from '../i18n'
 import { SpeechError } from './errors'
 import { transcribe } from './index'
 
@@ -54,34 +55,34 @@ function formatMb(bytes: number): string {
  */
 export async function readAudioFile(path: string): Promise<AudioFileData> {
   if (!path || !isAbsolute(path)) {
-    throw new SpeechError('文件路径不对', '请重新添加这个文件后再试。')
+    throw new SpeechError(mainT('speech.invalidPath'), mainT('speech.invalidPathHint'))
   }
 
   const ext = extname(path).replace(/^\./, '').toLowerCase()
   if (!isAudioFileExt(ext)) {
-    throw new SpeechError('这个文件不是音频格式', '只支持 mp3、wav、m4a、flac、ogg 等常见音频格式。')
+    throw new SpeechError(mainT('speech.notAudio'), mainT('speech.notAudioHint'))
   }
 
   let size: number
   try {
     const info = await stat(path)
     if (!info.isFile()) {
-      throw new SpeechError('这个路径不是文件', '请重新添加这个文件后再试。')
+      throw new SpeechError(mainT('speech.notAFile'), mainT('speech.invalidPathHint'))
     }
     size = info.size
   } catch (error) {
     if (error instanceof SpeechError) throw error
-    throw new SpeechError('文件不存在或无法读取', '它可能被移动或删除了，请重新添加。')
+    throw new SpeechError(mainT('speech.fileMissing'), mainT('speech.fileMissingHint'))
   }
 
   if (size === 0) {
-    throw new SpeechError('这个文件是空的', '请换一个音频文件。')
+    throw new SpeechError(mainT('speech.fileEmpty'), mainT('speech.fileEmptyHint'))
   }
 
   if (size > MAX_AUDIO_FILE_BYTES) {
     throw new SpeechError(
-      `文件太大（${formatMb(size)} MB）`,
-      `语音服务通常限制 25 MB，请先压缩或截短到 ${formatMb(MAX_AUDIO_FILE_BYTES)} MB 以内。`
+      mainT('speech.fileTooLarge', { size: formatMb(size) }),
+      mainT('speech.fileTooLargeHint', { max: formatMb(MAX_AUDIO_FILE_BYTES) })
     )
   }
 
@@ -89,7 +90,7 @@ export async function readAudioFile(path: string): Promise<AudioFileData> {
   try {
     bytes = await readFile(path)
   } catch {
-    throw new SpeechError('文件读取失败', '它可能正在被其他程序占用，请稍后再试。')
+    throw new SpeechError(mainT('speech.readFailed'), mainT('speech.readFailedHint'))
   }
 
   return {

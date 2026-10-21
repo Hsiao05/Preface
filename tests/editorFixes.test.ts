@@ -118,7 +118,7 @@ describe('流式内容只显示在结果页', () => {
   })
 
   it('优化中但还没内容时显示"正在分析…"', () => {
-    expect(area).toContain('正在分析…')
+    expect(area).toContain("t('editor.analyzing')")
   })
 
   it('优化中时"优化结果"标签可点', () => {
@@ -169,7 +169,7 @@ describe('流式和可编辑共用同一个容器（切换时不跳动）', () =
       area.indexOf('editedMark: {')
     )
 
-    for (const prop of ["position: 'absolute'", 'inset: 0', "padding: '10px 12px'", 'lineHeight:'] ) {
+    for (const prop of ["position: 'absolute'", 'inset: 0', "padding: '10px 12px 44px'", 'lineHeight:'] ) {
       expect(contentStyle, `resultContent 缺少 ${prop}`).toContain(prop)
       expect(editableStyle, `resultEditable 缺少 ${prop}`).toContain(prop)
     }

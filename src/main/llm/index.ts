@@ -5,12 +5,19 @@ import { getSecret } from '../secrets'
 import { LlmRequestError, listModels, runChat, testConnection, type ChatMessage } from './client'
 import { estimateTokens } from '../../shared/estimateTokens'
 import { describeNetworkError, type LlmError } from '../../shared/llmErrors'
+import { getUiLanguage, mainT } from '../i18n'
 import type { UsageInfo } from '../../shared/sse'
 
 /**
  * 调用的种类与参数（文档第五节的表）。
  */
-export type CallKind = 'optimize' | 'followup' | 'tidy' | 'title'
+export type CallKind =
+  | 'optimize'
+  | 'followup'
+  | 'tidy'
+  | 'title'
+  | 'translate'
+  | 'expression'
 
 /** 每种调用的 max_tokens 与默认超时 */
 export const CALL_SPECS: Record<
@@ -20,13 +27,20 @@ export const CALL_SPECS: Record<
   optimize: { stream: true, maxTokens: 3000, timeoutMs: 120000 },
   followup: { stream: true, maxTokens: 3000, timeoutMs: 120000 },
   tidy: { stream: true, maxTokens: 4000, timeoutMs: 120000 },
-  title: { stream: false, maxTokens: 50, timeoutMs: 30000 }
+  title: { stream: false, maxTokens: 50, timeoutMs: 30000 },
+  translate: { stream: false, maxTokens: 8000, timeoutMs: 120000 },
+  expression: { stream: false, maxTokens: 4000, timeoutMs: 120000 }
 }
 
-/** tidy 的 max_tokens 按原文估算的 2 倍，最少 500，最多 4000 */
+/** tidy / expression 的 max_tokens 按原文估算的 2 倍，最少 500，最多 4000 */
 export function tidyMaxTokens(sourceText: string): number {
   const estimate = estimateTokens(sourceText) * 2
   return Math.max(500, Math.min(4000, estimate))
+}
+
+/** 翻译输出可能比原文长，按原文估算的 3 倍给预算，最少 800，最多 8000 */
+export function translationMaxTokens(sourceText: string): number {
+  return Math.max(800, Math.min(8000, estimateTokens(sourceText) * 3))
 }
 
 // ---------- 进行中的请求 ----------
@@ -110,8 +124,8 @@ export async function startRun(input: RunInput, channel: string): Promise<StartR
     send(channel, {
       type: 'error',
       error: {
-        message: '还没有配置模型',
-        suggestion: '请到设置里添加一套模型配置，填入 Base URL 和 API Key。'
+        message: mainT('error.noProfile'),
+        suggestion: mainT('error.noProfileHint')
       }
     })
     return { requestId }
@@ -122,8 +136,8 @@ export async function startRun(input: RunInput, channel: string): Promise<StartR
     send(channel, {
       type: 'error',
       error: {
-        message: '这套配置还没有填 API Key',
-        suggestion: '请到设置里为这套配置填入 API Key。'
+        message: mainT('error.profileNoKey'),
+        suggestion: mainT('error.profileNoKeyHint')
       }
     })
     return { requestId }
@@ -131,9 +145,11 @@ export async function startRun(input: RunInput, channel: string): Promise<StartR
 
   const spec = CALL_SPECS[input.kind]
   const maxTokens =
-    input.kind === 'tidy' && input.sourceText
+    (input.kind === 'tidy' || input.kind === 'expression') && input.sourceText
       ? tidyMaxTokens(input.sourceText)
-      : spec.maxTokens
+      : input.kind === 'translate' && input.sourceText
+        ? translationMaxTokens(input.sourceText)
+        : spec.maxTokens
 
   const controller = new AbortController()
   pending.set(requestId, { controller, kind: input.kind, channel })
@@ -208,7 +224,7 @@ async function execute(input: ExecuteInput): Promise<void> {
     )
   } catch (error) {
     const info =
-      error instanceof LlmRequestError ? error.info : describeNetworkError(error)
+      error instanceof LlmRequestError ? error.info : describeNetworkError(error, getUiLanguage())
     send(channel, { type: 'error', error: info })
     log(`调用 ${requestId} 失败：${info.message}`)
   } finally {
@@ -226,8 +242,8 @@ export async function doListModels(
     return {
       ok: false,
       error: {
-        message: '还没有配置模型',
-        suggestion: '请先添加一套模型配置。'
+        message: mainT('error.noProfile'),
+        suggestion: mainT('error.noProfileHintShort')
       }
     }
   }
@@ -236,7 +252,7 @@ export async function doListModels(
   if (!apiKey) {
     return {
       ok: false,
-      error: { message: '还没有填 API Key', suggestion: '请先填入 API Key。' }
+      error: { message: mainT('error.noKey'), suggestion: mainT('error.noKeyHint') }
     }
   }
 
@@ -247,7 +263,7 @@ export async function doListModels(
     if (error instanceof LlmRequestError) {
       return { ok: false, error: error.info }
     }
-    return { ok: false, error: describeNetworkError(error) }
+    return { ok: false, error: describeNetworkError(error, getUiLanguage()) }
   }
 }
 
@@ -256,12 +272,21 @@ export async function doTestConnection(
 ): Promise<{ ok: true; elapsedMs: number } | { ok: false; error: LlmError }> {
   const profile = profileId ? getProfile(profileId) : getCurrentProfile()
   if (!profile) {
-    return { ok: false, error: { message: '还没有配置模型', suggestion: '请先添加一套模型配置。' } }
+    return {
+      ok: false,
+      error: {
+        message: mainT('error.noProfile'),
+        suggestion: mainT('error.noProfileHintShort')
+      }
+    }
   }
 
   const apiKey = getSecret(profile.id)
   if (!apiKey) {
-    return { ok: false, error: { message: '还没有填 API Key', suggestion: '请先填入 API Key。' } }
+    return {
+      ok: false,
+      error: { message: mainT('error.noKey'), suggestion: mainT('error.noKeyHint') }
+    }
   }
 
   return testConnection(profile, apiKey)

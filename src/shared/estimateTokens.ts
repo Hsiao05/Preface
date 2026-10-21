@@ -17,11 +17,6 @@ export function estimateTokens(text: string): number {
   return Math.round(cjkCount * 0.7 + otherCount / 4)
 }
 
-/** 带"约"字的显示形式 */
-export function formatTokenEstimate(text: string): string {
-  return `约 ${estimateTokens(text)} tokens`
-}
-
 /** 把 token 数显示成 1.6k 这样的形式 */
 export function formatTokenCount(tokens: number): string {
   if (tokens < 1000) return String(tokens)

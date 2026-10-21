@@ -16,9 +16,11 @@ import { useKeyboard } from './useKeyboard'
 import { useDraftPersistence } from './useDraft'
 import { useFileDrop } from './useFileDrop'
 import { useCopy } from './useCopy'
-import { useTidy } from './useLlmRun'
+import { useTextTransform } from './useTextTransform'
+import { useTranslate, type TranslatePane } from './useTranslate'
 import { useOptimize } from './useOptimize'
 import { useTheme, type ThemeMode } from './useTheme'
+import { useT } from './i18n'
 import { ClarifyPanel } from './components/ClarifyPanel'
 import { buildStatusText } from '../shared/statusText'
 import { TopBar, addPathsToDraft } from './components/TopBar'
@@ -31,8 +33,10 @@ import { UploadListDialog } from './components/UploadListDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { PromptLibraryDialog } from './components/PromptLibraryDialog'
 import { PromptContextBar } from './components/PromptContextBar'
+import { ProtectedReplaceDialog } from './components/ProtectedReplaceDialog'
+import { translate } from '../shared/i18n'
+import { displayPromptTitle } from '../shared/promptNames'
 import {
-  normalizePromptTitle,
   promptSelectionFrom,
   type PromptLibraryItem,
   type PromptUsageMode
@@ -51,6 +55,8 @@ const useStyles = makeStyles({
 
 export default function App(): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const uiLanguage = useStore((s) => s.uiLanguage)
   const setNotice = useStore((s) => s.setNotice)
   const draft = useStore((s) => s.draft)
   const activePrompt = useStore((s) => s.activePrompt)
@@ -61,12 +67,19 @@ export default function App(): JSX.Element {
   // 状态条要不要显示 Token 用量（设置 → 通用）
   const [showTokenUsage, setShowTokenUsage] = useState(true)
 
-  // 读取主题设置；设置窗口改主题后会广播事件
+  // 读取主题与语言设置；设置窗口改动后会广播事件
   useEffect(() => {
     const load = (): void => {
       void window.preface.getSettings().then((s) => {
         setThemeMode(s.theme)
         setShowTokenUsage(s.showTokenUsage)
+
+        const state = useStore.getState()
+        const changed = state.uiLanguage !== s.uiLanguage
+        state.setUiLanguage(s.uiLanguage)
+        document.documentElement.lang = s.uiLanguage === 'en' ? 'en' : 'zh-CN'
+        document.title = translate(s.uiLanguage, 'app.title')
+        if (changed) state.setNotice(null)
       })
     }
     load()
@@ -90,8 +103,11 @@ export default function App(): JSX.Element {
   // 一键复制的完整流程
   const { copy, copyState, confirmCopy, cancelCopy, closeUploadList } = useCopy()
 
-  // 整理碎碎念
-  const tidy = useTidy()
+  // 整理碎碎念 / 优化表达（共用一个改写流程）
+  const transform = useTextTransform()
+
+  // 翻译（原文和结果两个编辑框各自可以触发）
+  const translation = useTranslate()
 
   // 一键优化
   const optimize = useOptimize()
@@ -108,7 +124,7 @@ export default function App(): JSX.Element {
     const unsubShortcut = window.preface.onShortcutChanged(({ from, to }) => {
       setNotice({
         kind: 'warning',
-        text: `快捷键 ${from} 已被占用，已自动改用 ${to}。可以在设置里修改。`
+        text: t('notice.shortcutTaken', { from, to })
       })
     })
     const unsubSettings = window.preface.onOpenSettings(() => setSettingsOpen(true))
@@ -116,7 +132,7 @@ export default function App(): JSX.Element {
       unsubShortcut()
       unsubSettings()
     }
-  }, [setNotice])
+  }, [setNotice, t])
 
   // 整个窗口支持拖入文件
   const handleDrop = useCallback((paths: string[]) => {
@@ -154,8 +170,21 @@ export default function App(): JSX.Element {
   }, [copyState.issues.length, copyState.showUploadList, promptLibraryOpen, settingsOpen])
 
   const handleOptimize = useCallback(() => {
+    // 新动作开始前清掉旧的撤销，避免两个撤销互相覆盖
+    translation.clearUndo()
+    transform.clearUndo()
     void optimize.optimize()
-  }, [optimize])
+  }, [optimize, transform, translation])
+
+  const handleTidy = useCallback(() => {
+    translation.clearUndo()
+    void transform.tidy()
+  }, [transform, translation])
+
+  const handleImprove = useCallback(() => {
+    translation.clearUndo()
+    void transform.improve()
+  }, [transform, translation])
 
   /**
    * 清空前把草稿存进"上一次的内容"，这样 10 秒后仍能找回。
@@ -169,14 +198,25 @@ export default function App(): JSX.Element {
     })()
   }, [])
 
-  // 整理和优化同时只会有一个在跑
-  const runningKind = tidy.running
-    ? ('tidy' as const)
-    : optimize.state.phase === 'analyzing' || optimize.state.phase === 'streaming'
-      ? ('optimize' as const)
-      : optimize.state.phase === 'remedying'
-        ? ('followup' as const)
-        : null
+  // 同一时间只允许一个模型调用
+  const runningKind = translation.runningPane
+    ? ('translate' as const)
+    : transform.runningKind
+      ? transform.runningKind
+      : optimize.state.phase === 'analyzing' || optimize.state.phase === 'streaming'
+        ? ('optimize' as const)
+        : optimize.state.phase === 'remedying'
+          ? ('followup' as const)
+          : null
+
+  const handleTranslate = useCallback(
+    (pane: TranslatePane) => {
+      if (runningKind !== null && translation.runningPane === null) return
+      transform.clearUndo()
+      void translation.translate(pane)
+    },
+    [runningKind, transform, translation]
+  )
 
   /**
    * 优化是否仍在进行。
@@ -192,16 +232,20 @@ export default function App(): JSX.Element {
     optimize.state.phase === 'waiting-clarify'
 
   // 优化进行中时显示流式内容，否则显示整理的内容
-  const streamText = tidy.running ? tidy.streamText : optimize.streamText
+  const streamText =
+    transform.runningKind === 'tidy' ? transform.streamText : optimize.streamText
 
   // 结果状态条
-  const statusText = buildStatusText({
-    resolvedMode: optimize.state.resolvedMode,
-    mode: draft.mode,
-    usage: optimize.state.usage,
-    sawReasoning: optimize.state.sawReasoning,
-    showTokenUsage
-  })
+  const statusText = buildStatusText(
+    {
+      resolvedMode: optimize.state.resolvedMode,
+      mode: draft.mode,
+      usage: optimize.state.usage,
+      sawReasoning: optimize.state.sawReasoning,
+      showTokenUsage
+    },
+    uiLanguage
+  )
 
   /**
    * 把库里的 Prompt 追加到原文末尾。
@@ -209,15 +253,20 @@ export default function App(): JSX.Element {
    * 只整理首尾空白、保留正文内部格式；追加后切到原文页、标记已有结果过期。
    * 不自动选为模板、不调用模型、不新增语料编号。
    */
-  const handleAppendPrompt = useCallback((item: PromptLibraryItem) => {
-    const state = useStore.getState()
-    state.appendIntentText(item.content)
-    state.setActiveTab('source')
-    state.setNotice({
-      kind: 'success',
-      text: `已把「${normalizePromptTitle(item.title)}」追加到原文末尾。`
-    })
-  }, [])
+  const handleAppendPrompt = useCallback(
+    (item: PromptLibraryItem) => {
+      const state = useStore.getState()
+      state.appendIntentText(item.content)
+      state.setActiveTab('source')
+      state.setNotice({
+        kind: 'success',
+        text: t('notice.promptAppended', {
+          title: displayPromptTitle(item.title, t)
+        })
+      })
+    },
+    [t]
+  )
 
   /**
    * 设为优化时使用的 Prompt：只记选择，不立刻发请求、不改原文。
@@ -229,15 +278,15 @@ export default function App(): JSX.Element {
     (item: PromptLibraryItem, mode: PromptUsageMode) => {
       const state = useStore.getState()
       state.setPromptSelection(promptSelectionFrom(item, mode))
-      const title = normalizePromptTitle(item.title)
+      const title = displayPromptTitle(item.title, t)
       state.setNotice({
         kind: 'info',
         text: optimizeRunning
-          ? `这一轮已经开始，下次优化起使用「${title}」。`
-          : `优化时将使用「${title}」。`
+          ? t('notice.promptNextRun', { title })
+          : t('notice.promptWillUse', { title })
       })
     },
-    [optimizeRunning]
+    [optimizeRunning, t]
   )
 
   // 弹窗打开时暂停主窗口的优化/复制快捷键，避免误触
@@ -273,6 +322,16 @@ export default function App(): JSX.Element {
           }
           onArchiveDraft={handleArchiveDraft}
           isDark={isDark}
+          busy={runningKind !== null}
+          translation={{
+            targetLabel: translation.targetLabel,
+            runningPane: translation.runningPane,
+            undoPane: translation.undo?.pane ?? null,
+            undoSeconds: translation.secondsLeft,
+            onTranslate: handleTranslate,
+            onUndo: translation.undoNow,
+            onCancel: translation.cancel
+          }}
           promptContext={
             <PromptContextBar
               selection={draft.promptSelection}
@@ -284,13 +343,21 @@ export default function App(): JSX.Element {
           }
         />
         <BottomBar
-          onTidy={() => void tidy.tidy()}
+          onTidy={handleTidy}
+          onImprove={handleImprove}
           onOptimize={handleOptimize}
           onCopy={() => void copy()}
           runningKind={runningKind}
-          onCancel={runningKind === 'tidy' ? tidy.cancel : optimize.cancel}
-          canUndoTidy={tidy.canUndo}
-          onUndoTidy={tidy.undo}
+          onCancel={
+            transform.runningKind !== null ? transform.cancel : optimize.cancel
+          }
+          canUndoText={transform.canUndo}
+          undoTextLabel={t(
+            transform.undoKind === 'expression'
+              ? 'bottomBar.undoImprove'
+              : 'bottomBar.undoTidy'
+          )}
+          onUndoText={transform.undo}
           onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
         />
 
@@ -328,47 +395,35 @@ export default function App(): JSX.Element {
       >
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>将覆盖你的修改</DialogTitle>
-            <DialogContent>
-              你在优化结果里做过手动修改。继续的话，这些修改会被新的结果覆盖。确定吗？
-            </DialogContent>
+            <DialogTitle>{t('dialog.overwrite.title')}</DialogTitle>
+            <DialogContent>{t('dialog.overwrite.body')}</DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={optimize.cancelOverwrite}>
-                取消
+                {t('common.cancel')}
               </Button>
               <Button appearance="primary" onClick={optimize.confirmOverwrite}>
-                覆盖
+                {t('common.replace')}
               </Button>
             </DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
 
-      {/* 整理结果丢了 /命令：覆盖原文前先问一句 */}
-      <Dialog
-        open={tidy.pendingCommand !== null}
-        onOpenChange={(_, d) => !d.open && tidy.cancelReplace()}
-      >
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle>整理结果里缺少命令</DialogTitle>
-            <DialogContent>
-              原文里的 {tidy.pendingCommand?.missing.join('、')} 没有出现在整理结果里。
-              如果直接替换，这些命令就没法执行了。
-              <br />
-              可以点「取消」保留原文，手动把命令补进结果后再试。
-            </DialogContent>
-            <DialogActions>
-              <Button appearance="secondary" onClick={tidy.cancelReplace}>
-                取消
-              </Button>
-              <Button appearance="primary" onClick={tidy.confirmReplace}>
-                仍然替换
-              </Button>
-            </DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      {/* 整理 / 优化表达结果丢了命令或引用：覆盖原文前先问一句 */}
+      <ProtectedReplaceDialog
+        open={transform.pending !== null}
+        issues={transform.pending?.issues ?? []}
+        onCancel={transform.cancelReplace}
+        onConfirm={transform.confirmReplace}
+      />
+
+      {/* 翻译结果丢了命令或引用：同样先确认 */}
+      <ProtectedReplaceDialog
+        open={translation.pending !== null}
+        issues={translation.pending?.issues ?? []}
+        onCancel={translation.cancelReplace}
+        onConfirm={translation.confirmReplace}
+      />
 
       <PromptLibraryDialog
         open={promptLibraryOpen}
@@ -384,6 +439,7 @@ export default function App(): JSX.Element {
 }
 
 function DropOverlay(): JSX.Element {
+  const t = useT()
   // 颜色写在 index.css 的 .drop-overlay 里，深浅色各一套
-  return <div className="drop-overlay">松开鼠标，把文件加进来</div>
+  return <div className="drop-overlay">{t('app.dropOverlay')}</div>
 }

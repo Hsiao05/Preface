@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useStore } from './store'
+import { translate } from '../shared/i18n'
 
 const SAVE_DELAY = 1000
 
@@ -88,7 +89,10 @@ export function useDraftPersistence(): void {
       if (previous && !previous.expired) {
         setNotice({
           kind: 'info',
-          text: '上一次的内容还在。可以在「设置 → 找回之前的内容」里找回。'
+          text: translate(
+            state.uiLanguage,
+            'notice.previousAvailable'
+          )
         })
       }
     })

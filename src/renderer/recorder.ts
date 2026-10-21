@@ -1,4 +1,11 @@
 import { TARGET_SAMPLE_RATE } from '../shared/speech'
+import { translate } from '../shared/i18n'
+import { useStore } from './store'
+
+/** 当前界面语言下的文案 */
+function t(key: Parameters<typeof translate>[1], params?: Record<string, string | number>): string {
+  return translate(useStore.getState().uiLanguage, key, params)
+}
 
 /**
  * 录音。
@@ -32,10 +39,10 @@ class CaptureProcessor extends AudioWorkletProcessor {
     const input = inputs[0]
     if (!input || input.length === 0) return true
 
-    // 取第一个声道（单声道采集）
+    // Take the first channel (mono capture)
     const channel = input[0]
     if (channel && channel.length > 0) {
-      // 复制一份再发，因为这块内存会被复用
+      // Copy before posting: this buffer is reused by the audio thread
       this.port.postMessage(new Float32Array(channel))
     }
     return true
@@ -131,7 +138,9 @@ export class Recorder {
     } catch (error) {
       this.cleanup()
       throw new Error(
-        `录音初始化失败：${error instanceof Error ? error.message : String(error)}`
+        t('recorder.initFailed', {
+          message: error instanceof Error ? error.message : String(error)
+        })
       )
     }
   }
@@ -199,24 +208,24 @@ export class Recorder {
     }
   }
 
-  /** 把 getUserMedia 的错误翻成中文 */
+  /** 把 getUserMedia 的错误翻成当前界面语言的说明 */
   private describeMediaError(error: unknown): Error {
     const name = error instanceof Error ? error.name : ''
 
     if (name === 'NotAllowedError' || name === 'SecurityError') {
-      return new Error(
-        '麦克风权限被关闭，请到 Windows 设置 → 隐私和安全性 → 麦克风 中允许桌面应用访问'
-      )
+      return new Error(t('recorder.permission'))
     }
     if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-      return new Error('没有找到麦克风')
+      return new Error(t('recorder.noMic'))
     }
     if (name === 'NotReadableError') {
-      return new Error('麦克风被其他程序占用了，请关掉正在使用麦克风的程序')
+      return new Error(t('recorder.busy'))
     }
 
     return new Error(
-      `无法使用麦克风：${error instanceof Error ? error.message : String(error)}`
+      t('recorder.generic', {
+        message: error instanceof Error ? error.message : String(error)
+      })
     )
   }
 }

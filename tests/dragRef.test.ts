@@ -74,7 +74,7 @@ describe('资料栏自动换行', () => {
 describe('设置窗口只有一个关闭入口', () => {
   it('保留标题栏的关闭按钮', () => {
     const source = read('src/renderer/components/SettingsDialog.tsx')
-    expect(source).toContain('aria-label="关闭设置"')
+    expect(source).toContain("aria-label={t('settings.close')}")
   })
 
   it('不再有底部的第二个关闭按钮', () => {

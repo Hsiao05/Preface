@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { Button, Tooltip, makeStyles, tokens } from '@fluentui/react-components'
 import { ArrowUndo16Regular, Delete16Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 import type { Draft } from '../../shared/types'
 
 /**
@@ -38,6 +39,7 @@ interface Props {
 
 export function ClearButton({ onArchive }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const draft = useStore((s) => s.draft)
   const clearDraft = useStore((s) => s.clearDraft)
   const setNotice = useStore((s) => s.setNotice)
@@ -73,7 +75,7 @@ export function ClearButton({ onArchive }: Props): JSX.Element {
 
     // 3. 清空（保留目标、模式、风格等选择）
     clearDraft()
-    setNotice({ kind: 'success', text: '已经清空' })
+    setNotice({ kind: 'success', text: t('clear.done') })
 
     // 4. 开始 10 秒倒计时
     setSecondsLeft(UNDO_WINDOW / 1000)
@@ -108,13 +110,16 @@ export function ClearButton({ onArchive }: Props): JSX.Element {
       timerRef.current = null
     }
 
-    setNotice({ kind: 'info', text: '已撤销，内容已恢复。' })
+    setNotice({ kind: 'info', text: t('clear.undone') })
   }
 
   // 撤销窗口内：显示"撤销"
   if (secondsLeft !== null && snapshot) {
     return (
-      <Tooltip content={`恢复清空前的内容（还剩 ${secondsLeft} 秒）`} relationship="label">
+      <Tooltip
+        content={t('clear.undoTooltip', { seconds: secondsLeft })}
+        relationship="label"
+      >
         <Button
           className={styles.undoButton}
           appearance="subtle"
@@ -122,20 +127,20 @@ export function ClearButton({ onArchive }: Props): JSX.Element {
           icon={<ArrowUndo16Regular />}
           onClick={handleUndo}
         >
-          撤销
+          {t('common.undo')}
         </Button>
       </Tooltip>
     )
   }
 
   return (
-    <Tooltip content="清空原文文件和语料" relationship="label">
+    <Tooltip content={t('clear.tooltip')} relationship="label">
       <Button
         className={styles.button}
         appearance="subtle"
         size="small"
         icon={<Delete16Regular />}
-        aria-label="清空原文文件和语料"
+        aria-label={t('clear.tooltip')}
         disabled={!hasContent}
         onClick={handleClear}
       />

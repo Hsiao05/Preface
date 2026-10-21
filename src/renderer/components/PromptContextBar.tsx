@@ -2,11 +2,12 @@ import { useRef, type JSX } from 'react'
 import { Button, makeStyles, tokens, Tooltip } from '@fluentui/react-components'
 import { Dismiss16Regular, Info16Regular } from '@fluentui/react-icons'
 import {
-  PROMPT_MODE_LABELS,
-  normalizePromptTitle,
   samePromptSelection,
   type PromptSelection
 } from '../../shared/promptLibrary'
+import { displayPromptTitle } from '../../shared/promptNames'
+import { useT } from '../i18n'
+import type { TFunction } from '../../shared/i18n'
 
 /**
  * 编辑区工具行里的 Prompt 使用状态。
@@ -73,6 +74,7 @@ interface Props {
 }
 
 function buildHelp(
+  t: TFunction,
   selection: PromptSelection | null,
   activePrompt: PromptSelection | null,
   running: boolean
@@ -80,28 +82,26 @@ function buildHelp(
   const parts: string[] = []
 
   if (selection) {
-    parts.push(`完整标题：${normalizePromptTitle(selection.title)}`)
+    parts.push(t('promptContext.helpTitle', { title: displayPromptTitle(selection.title, t) }))
     parts.push(
       selection.mode === 'reference'
-        ? '参考结构和表达：只借鉴章节、步骤、语气和详略，任务内容以原文为准。'
-        : '完整模板套用：保留模板的章节顺序、固定文案和格式，用原文和澄清回答填入任务部分。'
+        ? t('promptContext.helpReference')
+        : t('promptContext.helpTemplate')
     )
     if (selection.mode === 'template') {
-      parts.push(
-        '完整模板套用时按模板正文格式输出，下方模式设置暂不生效；移除模板后恢复，原设置不会改变。'
-      )
+      parts.push(t('promptContext.helpTemplateMode'))
     }
   } else if (running && activePrompt) {
-    parts.push('下一次点「优化提示词」时不会使用 Prompt。')
+    parts.push(t('promptContext.helpWillNotUse'))
   }
 
   if (running) {
     // 这一轮已经冻结了快照，改动只能等下一轮
     const changed = !samePromptSelection(selection, activePrompt)
     if (changed) {
-      parts.push('这一轮已经开始，改动从下一次优化起生效，不会影响当前结果和澄清。')
+      parts.push(t('promptContext.helpChanged'))
     } else {
-      parts.push('当前这一轮正在使用这份 Prompt；改动会从下一次优化起生效。')
+      parts.push(t('promptContext.helpCurrent'))
     }
   }
 
@@ -116,16 +116,21 @@ export function PromptContextBar({
   onRemove
 }: Props): JSX.Element | null {
   const styles = useStyles()
+  const t = useT()
   const changeRef = useRef<HTMLButtonElement>(null)
 
   // 没有下一次选择、也没有正在进行的运行：整条不显示，不占空行。
   // activePrompt 在请求结束后仍然保留，不能单独作为显示依据。
   if (!selection && !(running && activePrompt)) return null
 
-  const title = selection ? normalizePromptTitle(selection.title) : '不使用 Prompt'
-  const mode = selection ? PROMPT_MODE_LABELS[selection.mode] : null
+  const title = selection ? displayPromptTitle(selection.title, t) : t('promptContext.none')
+  const mode = selection
+    ? selection.mode === 'reference'
+      ? t('prompt.mode.reference')
+      : t('prompt.mode.template')
+    : null
   // 空闲时说「优化时使用」；只有已经开跑、改动要等下一轮时才说「下次优化」
-  const prefix = running ? '下次优化：' : '优化时使用：'
+  const prefix = running ? t('promptContext.nextRun') : t('promptContext.thisRun')
 
   const handleRemove = (): void => {
     const barWillStay = running && activePrompt !== null
@@ -138,7 +143,7 @@ export function PromptContextBar({
   }
 
   return (
-    <div className={styles.root} aria-label="Prompt 使用状态">
+    <div className={styles.root} aria-label={t('promptContext.label')}>
       <span className={styles.prefix}>{prefix}</span>
       <span className={styles.title}>{title}</span>
       {mode && (
@@ -153,7 +158,7 @@ export function PromptContextBar({
       <Tooltip
         content={
           <span style={{ whiteSpace: 'pre-line' }}>
-            {buildHelp(selection, activePrompt, running)}
+            {buildHelp(t, selection, activePrompt, running)}
           </span>
         }
         relationship="description"
@@ -163,7 +168,7 @@ export function PromptContextBar({
           size="small"
           appearance="subtle"
           icon={<Info16Regular />}
-          aria-label="查看 Prompt 使用说明"
+          aria-label={t('promptContext.helpAria')}
         />
       </Tooltip>
 
@@ -174,17 +179,17 @@ export function PromptContextBar({
         appearance="subtle"
         onClick={onOpenLibrary}
       >
-        更换
+        {t('promptContext.change')}
       </Button>
 
       {selection && (
-        <Tooltip content="移除这份 Prompt" relationship="label">
+        <Tooltip content={t('promptContext.remove')} relationship="label">
           <Button
             className={styles.iconButton}
             size="small"
             appearance="subtle"
             icon={<Dismiss16Regular />}
-            aria-label="移除这份 Prompt"
+            aria-label={t('promptContext.remove')}
             onClick={handleRemove}
           />
         </Tooltip>

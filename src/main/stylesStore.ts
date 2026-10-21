@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, copyFil
 import { join, dirname } from 'path'
 import { z } from 'zod'
 import { log } from './logger'
+import { mainT } from './i18n'
 import { BUILTIN_BLOCKS, BLOCK_META, type BlockId } from '../shared/prompts/blocks'
 import { BUILTIN_TEMPLATES, TEMPLATE_META, type TemplateId } from '../shared/prompts/templates'
 import { BUILTIN_STYLES, MY_STYLE_ID } from '../shared/prompts/styles'
@@ -28,6 +29,8 @@ export const BUILTIN_VERSIONS = {
   // 模板
   tidy: 2, // 加过"保留 /命令"
   title: 1,
+  translate: 1,
+  expression: 2, // 2 改成只做词句润色，不再调整结构
   // 风格
   'clear-direct': 1,
   rigorous: 1,
@@ -108,11 +111,11 @@ export function defaultItems(): StyleItem[] {
     })
   }
 
-  // 我的附加要求
+  // Extra requirements. The UI maps this id to a localized name.
   items.push({
     id: 'extra',
     kind: 'extra',
-    name: '我的附加要求',
+    name: 'My extra requirements',
     builtin: true,
     builtinVersion: 1,
     edited: false,
@@ -384,19 +387,19 @@ export function importStyles(json: string): {
   try {
     parsed = JSON.parse(json)
   } catch {
-    return { ok: false, conflicts: [], items: [], error: '文件不是合法的 JSON' }
+    return { ok: false, conflicts: [], items: [], error: mainT('styles.importInvalidJson') }
   }
 
   const obj = parsed as Record<string, unknown>
   const rawItems = Array.isArray(obj?.items) ? obj.items : null
 
   if (!rawItems) {
-    return { ok: false, conflicts: [], items: [], error: '文件里没有找到提示词数据' }
+    return { ok: false, conflicts: [], items: [], error: mainT('styles.importNoItems') }
   }
 
   const validated = z.array(itemSchema).safeParse(rawItems)
   if (!validated.success) {
-    return { ok: false, conflicts: [], items: [], error: '文件内容格式不对' }
+    return { ok: false, conflicts: [], items: [], error: mainT('styles.importBadFormat') }
   }
 
   // 找出和现有项冲突的 id（内置项不算冲突，因为要按 id 匹配）

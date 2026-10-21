@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { captureState, loadWindowState, saveWindowState } from './windowState'
 import { log } from './logger'
+import { mainT } from './i18n'
 
 const isDev = !app.isPackaged
 
@@ -42,7 +43,7 @@ export function createWindow(): BrowserWindow {
     minHeight: 480,
     show: false,
     autoHideMenuBar: true,
-    title: '序 · Preface',
+    title: mainT('app.title'),
     icon: resourcePath('icon.png'),
     // 背景色跟着主题，避免深色模式下启动瞬间闪白
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3',
@@ -172,6 +173,24 @@ export function applyTheme(theme: 'system' | 'light' | 'dark'): void {
   }
 }
 
+/** 托盘菜单里「设置」要调用的回调，语言变化重建菜单时复用 */
+let trayOpenSettings: (() => void) | null = null
+
+function buildTrayMenu(onOpenSettings: () => void): Menu {
+  return Menu.buildFromTemplate([
+    { label: mainT('tray.show'), click: () => showWindow() },
+    { label: mainT('tray.settings'), click: () => onOpenSettings() },
+    { type: 'separator' },
+    {
+      label: mainT('tray.quit'),
+      click: () => {
+        setQuitting(true)
+        app.quit()
+      }
+    }
+  ])
+}
+
 /** 创建托盘图标和菜单 */
 export function createTray(onOpenSettings: () => void): void {
   const iconFile = resourcePath('tray.png')
@@ -180,25 +199,27 @@ export function createTray(onOpenSettings: () => void): void {
     return
   }
 
+  trayOpenSettings = onOpenSettings
   tray = new Tray(nativeImage.createFromPath(iconFile))
-  const menu = Menu.buildFromTemplate([
-    { label: '显示窗口', click: () => showWindow() },
-    { label: '设置', click: () => onOpenSettings() },
-    { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        setQuitting(true)
-        app.quit()
-      }
-    }
-  ])
 
-  tray.setToolTip('序 · Preface')
-  tray.setContextMenu(menu)
+  tray.setToolTip(mainT('app.title'))
+  tray.setContextMenu(buildTrayMenu(onOpenSettings))
 
   // 左键单击切换显示/隐藏
   tray.on('click', () => toggleWindow())
+}
+
+/** 界面语言变化后，更新窗口标题和托盘菜单 */
+export function refreshTrayLanguage(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setTitle(mainT('app.title'))
+  }
+  if (!tray || tray.isDestroyed()) return
+
+  tray.setToolTip(mainT('app.title'))
+  if (trayOpenSettings) {
+    tray.setContextMenu(buildTrayMenu(trayOpenSettings))
+  }
 }
 
 /** 保存窗口状态，程序退出前调用 */

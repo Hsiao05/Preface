@@ -93,7 +93,10 @@ describe('对话框与 useTitle 的实现约束', () => {
   const actions = readFileSync(join(root, 'src/renderer/corpusActions.ts'), 'utf-8')
 
   it('标题输入框始终可编辑（没有 readOnly / disabled）', () => {
-    const input = dialog.slice(dialog.indexOf('<Input'), dialog.indexOf('placeholder="例如：客户口头反馈整理"'))
+    const input = dialog.slice(
+      dialog.indexOf('<Input'),
+      dialog.indexOf("placeholder={t('corpus.titlePlaceholder')}")
+    )
     expect(input).not.toContain('readOnly')
     expect(input).not.toContain('disabled')
   })

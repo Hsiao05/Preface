@@ -15,12 +15,9 @@ import { Mic20Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
 import { addCorpusToDraft } from '../corpusActions'
 import { appendWithSpacing } from '../../shared/appendText'
-import {
-  cleanTranscript,
-  EMPTY_RESULT_MESSAGE,
-  MAX_AUDIO_FILE_BYTES
-} from '../../shared/speech'
-import { formatSize } from '../format'
+import { cleanTranscript, MAX_AUDIO_FILE_BYTES } from '../../shared/speech'
+import { formatNumber, formatSize } from '../format'
+import { useT, useUiLanguage } from '../i18n'
 import type { FileResource } from '../../shared/types'
 
 /**
@@ -113,6 +110,8 @@ function formatElapsed(seconds: number): string {
 
 export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const language = useUiLanguage()
   const setNotice = useStore((s) => s.setNotice)
 
   const [phase, setPhase] = useState<Phase>('idle')
@@ -221,7 +220,10 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
     const corpus = addCorpusToDraft(titleFromName(file.name), text.trim())
     setNotice({
       kind: 'success',
-      text: `已把转录内容添加为语料 ${corpus.id}（${corpus.chars.toLocaleString('zh-CN')} 字）`
+      text: t('audio.addedCorpus', {
+        id: corpus.id,
+        count: formatNumber(corpus.chars, language)
+      })
     })
     onClose()
   }
@@ -234,7 +236,9 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
     state.setActiveTab('source')
     setNotice({
       kind: 'success',
-      text: `已把转录内容追加到原文末尾（${text.trim().length.toLocaleString('zh-CN')} 字）`
+      text: t('audio.appended', {
+        count: formatNumber(text.trim().length, language)
+      })
     })
     onClose()
   }
@@ -245,7 +249,7 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
     <Dialog open={open} onOpenChange={(_, data) => !data.open && handleClose()}>
       <DialogSurface className={styles.surface}>
         <DialogBody>
-          <DialogTitle>转录音频</DialogTitle>
+          <DialogTitle>{t('audio.title')}</DialogTitle>
           <DialogContent className={styles.content}>
             <div className={styles.fileRow}>
               <Mic20Regular />
@@ -255,35 +259,29 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
               </span>
             </div>
 
-            <div className={styles.hint}>
-              转录会把这段音频发送到「设置 → 语音」里配置的服务。程序不保存音频副本，
-              也不需要的话可以在资料栏删除这个文件。
-            </div>
+            <div className={styles.hint}>{t('audio.hint')}</div>
 
             {configured === false && (
-              <div className={styles.warning}>
-                还没有配置语音识别。请到「设置 → 语音」里选择服务商并填入 API Key。
-              </div>
+              <div className={styles.warning}>{t('audio.notConfigured')}</div>
             )}
 
             {tooLarge && file && (
               <div className={styles.warning}>
-                文件太大（{formatSize(file.size)}），语音服务通常限制 25 MB，
-                请先压缩或截短后再试。
+                {t('audio.tooLarge', { size: formatSize(file.size) })}
               </div>
             )}
 
             {phase === 'transcribing' && (
               <div className={styles.progress}>
                 <Spinner size="tiny" />
-                <span>转录中… 已用 {formatElapsed(elapsed)}</span>
+                <span>{t('audio.progress', { time: formatElapsed(elapsed) })}</span>
               </div>
             )}
 
             {error && <div className={styles.warning}>{error}</div>}
 
             {phase === 'done' && !text && (
-              <div className={styles.warning}>{EMPTY_RESULT_MESSAGE}</div>
+              <div className={styles.warning}>{t('audio.emptyResult')}</div>
             )}
 
             {phase === 'done' && text && (
@@ -292,7 +290,7 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 spellCheck={false}
-                aria-label="转录结果"
+                aria-label={t('audio.resultAria')}
               />
             )}
           </DialogContent>
@@ -300,13 +298,13 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
           <DialogActions>
             {phase === 'transcribing' && (
               <Button appearance="secondary" onClick={cancel}>
-                取消转录
+                {t('audio.cancel')}
               </Button>
             )}
 
             {phase !== 'transcribing' && (
               <Button appearance="secondary" onClick={handleClose}>
-                关闭
+                {t('common.close')}
               </Button>
             )}
 
@@ -319,20 +317,20 @@ export function AudioTranscribeDialog({ file, onClose }: Props): JSX.Element {
                     void start()
                   }}
                 >
-                  重新转录
+                  {t('audio.retry')}
                 </Button>
                 <Button appearance="secondary" onClick={appendToIntent}>
-                  追加到原文
+                  {t('audio.append')}
                 </Button>
                 <Button appearance="primary" onClick={addAsCorpus}>
-                  作为语料添加
+                  {t('audio.addCorpus')}
                 </Button>
               </>
             )}
 
             {phase !== 'transcribing' && !text && (
               <Button appearance="primary" disabled={!canStart} onClick={() => void start()}>
-                开始转录
+                {t('audio.start')}
               </Button>
             )}
           </DialogActions>

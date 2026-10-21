@@ -33,6 +33,10 @@ export const settingsSchema = z.object({
   theme: z.enum(['system', 'light', 'dark']).default('system'),
   /** 界面缩放比例。1 表示 100%。范围 0.7 到 1.5。 */
   zoom: z.number().min(0.7).max(1.5).default(1),
+  /** 界面语言：中文 / English */
+  uiLanguage: z.enum(['zh', 'en']).default('zh'),
+  /** 翻译目标：预设语言 id，或用户自己输入的语言名 */
+  translationTarget: z.string().max(60).default('en'),
 
   // 默认值
   defaultTarget: z.enum(['local', 'web']).default('local'),

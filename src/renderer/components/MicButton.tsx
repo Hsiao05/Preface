@@ -2,6 +2,7 @@ import { type JSX } from 'react'
 import { Tooltip, makeStyles, tokens } from '@fluentui/react-components'
 import { Mic20Regular, Dismiss16Regular } from '@fluentui/react-icons'
 import { formatDuration } from '../recorder'
+import { useT } from '../i18n'
 import type { VoiceState } from '../useVoiceInput'
 
 /**
@@ -115,15 +116,16 @@ const BAR_COUNT = 4
 
 export function MicButton({ state, elapsed, level, disabled, onStart, onCancel }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
 
   // ---------- 识别中 ----------
   if (state === 'transcribing') {
     return (
       <div className={styles.wrap}>
-        <Tooltip content="点击取消识别" relationship="label">
+        <Tooltip content={t('mic.cancelTranscribe')} relationship="label">
           <button className={styles.button} onClick={onCancel} type="button">
             <span className={styles.spinner} />
-            <span>识别中…</span>
+            <span>{t('mic.transcribing')}</span>
             <Dismiss16Regular />
           </button>
         </Tooltip>
@@ -162,7 +164,7 @@ export function MicButton({ state, elapsed, level, disabled, onStart, onCancel }
   return (
     <div className={styles.wrap}>
       <Tooltip
-        content="语音输入（点击开始，按任意键或点击鼠标停止）"
+        content={t('mic.tooltip')}
         relationship="label"
       >
         <button

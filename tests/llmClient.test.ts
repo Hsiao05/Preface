@@ -523,13 +523,14 @@ describe('测试连接', () => {
     expect(maxTokens).toBeGreaterThanOrEqual(256)
   })
 
-  it('仍然要求模型只回复一个字，实际输出很短', async () => {
-    server = await startMockServer({ format: 'openai', reply: '好' })
+  it('仍然要求模型只回复 OK，实际输出很短', async () => {
+    server = await startMockServer({ format: 'openai', reply: 'OK' })
     await testConnection(profile(server.url), 'k')
     const messages = (server.requests[0].body as Record<string, unknown>).messages as Array<{
       content: string
     }>
-    expect(messages[0].content).toContain('回复"好"这一个字')
+    // 测试提示词不随界面语言变化，固定用英文，避免模型回答被界面语言影响
+    expect(messages[0].content).toContain('single word "OK"')
   })
 
   it('失败时返回中文错误而不是抛异常', async () => {

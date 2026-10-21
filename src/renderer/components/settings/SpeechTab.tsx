@@ -13,12 +13,13 @@ import {
 import { Mic20Regular, Stop20Regular } from '@fluentui/react-icons'
 import { Recorder } from '../../recorder'
 import {
-  API_TYPE_LABELS,
+  API_TYPE_KEYS,
   SPEECH_LANGUAGES,
   SPEECH_PRESETS,
   type SpeechApiType,
   type SpeechLanguage
 } from '../../../shared/speech'
+import { useT } from '../../i18n'
 import type { SpeechSettings } from '../../../main/settings'
 
 /**
@@ -76,6 +77,7 @@ const TEST_SECONDS = 3
 
 export function SpeechTab({ onNotice }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const [speech, setSpeech] = useState<SpeechSettings | null>(null)
   const [hasKey, setHasKey] = useState(false)
   const [keyInput, setKeyInput] = useState('')
@@ -121,7 +123,10 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
       model: preset.model,
       apiType: preset.apiType
     })
-    onNotice({ kind: 'success', text: `已填入「${preset.name}」的配置。` })
+    onNotice({
+      kind: 'success',
+      text: t('settings.speech.presetFilled', { name: t(preset.nameKey) })
+    })
   }
 
   /** 保存 API Key */
@@ -130,12 +135,12 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
 
     const ok = await window.preface.setSpeechKey(keyInput.trim())
     if (!ok) {
-      onNotice({ kind: 'warning', text: 'API Key 保存失败，系统可能不支持加密存储。' })
+      onNotice({ kind: 'warning', text: t('settings.model.apiKeySaveFailed') })
       return
     }
     setKeyInput('')
     setHasKey(true)
-    onNotice({ kind: 'success', text: '语音 API Key 已保存。' })
+    onNotice({ kind: 'success', text: t('settings.speech.keySaved') })
   }
 
   /**
@@ -160,7 +165,7 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
       setTestCountdown(0)
       onNotice({
         kind: 'warning',
-        text: error instanceof Error ? error.message : '无法开始录音'
+        text: error instanceof Error ? error.message : t('settings.speech.cannotStart')
       })
       return
     }
@@ -182,14 +187,16 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
       setTesting(false)
       onNotice({
         kind: 'warning',
-        text: `停止录音失败：${error instanceof Error ? error.message : String(error)}`
+        text: t('settings.speech.stopFailed', {
+          message: error instanceof Error ? error.message : String(error)
+        })
       })
       return
     }
 
     if (wav.length === 0) {
       setTesting(false)
-      onNotice({ kind: 'warning', text: '没有录到声音。' })
+      onNotice({ kind: 'warning', text: t('settings.speech.noSound') })
       return
     }
 
@@ -206,36 +213,38 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
       onNotice({
         kind: 'warning',
         text: result.error.suggestion
-          ? `${result.error.message}。${result.error.suggestion}`
+          ? t('speech.errorWithSuggestion', {
+              message: result.error.message,
+              suggestion: result.error.suggestion
+            })
           : result.error.message
       })
       return
     }
 
-    setTestResult(result.text || '（识别结果为空）')
+    setTestResult(result.text || t('settings.speech.emptyResult'))
   }
 
-  if (!speech) return <Spinner label="正在读取" />
+  if (!speech) return <Spinner label={t('settings.speech.loading')} />
 
   const currentPreset = SPEECH_PRESETS.find((p) => p.id === speech.preset)
 
   return (
     <div className={styles.section}>
-      <div className={styles.title}>语音输入</div>
-      <div className={styles.hint}>
-        在原文输入框的右下角点麦克风开始录音，按任意键或点击鼠标停止并识别。
-        语音数据会发送给你选择的语音服务商。
-      </div>
+      <div className={styles.title}>{t('settings.speech.title')}</div>
+      <div className={styles.hint}>{t('settings.speech.intro')}</div>
 
-      <Field label="服务商预设" hint="选一个预设会自动填好下面的地址、模型和接口类型。">
+      <Field label={t('settings.speech.preset')} hint={t('settings.speech.presetHint')}>
         <Dropdown
-          value={currentPreset?.name ?? '自定义'}
+          value={
+            currentPreset ? t(currentPreset.nameKey) : t('builtin.speech.custom')
+          }
           selectedOptions={[speech.preset]}
           onOptionSelect={(_, d) => void choosePreset(d.optionValue as string)}
         >
           {SPEECH_PRESETS.map((preset) => (
             <Option key={preset.id} value={preset.id}>
-              {preset.name}
+              {t(preset.nameKey)}
             </Option>
           ))}
         </Dropdown>
@@ -245,13 +254,15 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
         <Input
           value={speech.baseUrl}
           onChange={(_, d) => void patch({ baseUrl: d.value, preset: 'custom' })}
-          placeholder="例如：https://api.siliconflow.cn/v1"
+          placeholder={t('settings.speech.baseUrlPlaceholder')}
         />
       </Field>
 
       <Field
         label="API Key"
-        hint={hasKey ? '已设置。要换一个，就在下面填新的。' : '还没有设置。填入后会加密保存。'}
+        hint={
+          hasKey ? t('settings.model.apiKeySet') : t('settings.model.apiKeyUnset')
+        }
       >
         <div className={styles.row}>
           <Input
@@ -259,54 +270,64 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
             type="password"
             value={keyInput}
             onChange={(_, d) => setKeyInput(d.value)}
-            placeholder={hasKey ? '已设置（留空则不改）' : '粘贴语音服务的 API Key'}
+            placeholder={
+              hasKey
+                ? t('settings.model.apiKeyPlaceholderSet')
+                : t('settings.speech.apiKeyPlaceholderUnset')
+            }
           />
           <Button
             appearance="primary"
             disabled={!keyInput.trim()}
             onClick={() => void saveKey()}
           >
-            保存
+            {t('common.save')}
           </Button>
         </div>
       </Field>
 
-      <Field label="模型">
+      <Field label={t('settings.model.model')}>
         <Input
           value={speech.model}
           onChange={(_, d) => void patch({ model: d.value, preset: 'custom' })}
-          placeholder="例如：FunAudioLLM/SenseVoiceSmall"
+          placeholder={t('settings.speech.modelPlaceholder')}
         />
       </Field>
 
-      <Field label="接口类型">
+      <Field label={t('settings.speech.apiType')}>
         <Dropdown
-          value={API_TYPE_LABELS[speech.apiType]}
+          value={t(API_TYPE_KEYS[speech.apiType])}
           selectedOptions={[speech.apiType]}
           onOptionSelect={(_, d) =>
             void patch({ apiType: d.optionValue as SpeechApiType, preset: 'custom' })
           }
         >
-          <Option value="transcriptions">{API_TYPE_LABELS.transcriptions}</Option>
-          <Option value="chat-audio">{API_TYPE_LABELS['chat-audio']}</Option>
+          <Option value="transcriptions">{t('speech.apiType.transcriptions')}</Option>
+          <Option value="chat-audio">{t('speech.apiType.chat-audio')}</Option>
         </Dropdown>
       </Field>
 
-      <Field label="识别语言">
+      <Field label={t('settings.speech.language')}>
         <Dropdown
-          value={SPEECH_LANGUAGES.find((l) => l.value === speech.language)?.label ?? '自动'}
+          value={t(
+            SPEECH_LANGUAGES.find((l) => l.value === speech.language)?.labelKey ??
+              'speech.lang.auto'
+          )}
           selectedOptions={[speech.language]}
           onOptionSelect={(_, d) => void patch({ language: d.optionValue as SpeechLanguage })}
         >
           {SPEECH_LANGUAGES.map((lang) => (
             <Option key={lang.value} value={lang.value}>
-              {lang.label}
+              {t(lang.labelKey)}
             </Option>
           ))}
         </Dropdown>
       </Field>
 
-      <Field label="最长录音时长（分钟）" hint="录满会自动停止并开始识别。">
+      <Field
+        label={t('settings.speech.maxSeconds')}
+        hint={t('settings.speech.maxSecondsHint')}
+      >
         <Input
           type="number"
           value={String(Math.round(speech.maxSeconds / 60))}
@@ -318,7 +339,10 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
       </Field>
 
       {/* 测试 */}
-      <Field label="测试" hint={`点一下，录 ${TEST_SECONDS} 秒并识别，看能不能正常工作。`}>
+      <Field
+        label={t('settings.speech.test')}
+        hint={t('settings.speech.testHint', { seconds: TEST_SECONDS })}
+      >
         <div className={styles.row}>
           <Button
             icon={testing ? <Stop20Regular /> : <Mic20Regular />}
@@ -326,17 +350,21 @@ export function SpeechTab({ onNotice }: Props): JSX.Element {
             disabled={testing && testCountdown === 0}
             onClick={() => void runTest()}
           >
-            {testing ? `录音中… ${testCountdown} 秒` : '录 3 秒并识别'}
+            {testing
+              ? t('settings.speech.recording', { seconds: testCountdown })
+              : t('settings.speech.recordTest', { seconds: TEST_SECONDS })}
           </Button>
           {testElapsed !== null && (
-            <Text className={styles.testLabel}>耗时 {testElapsed} 毫秒</Text>
+            <Text className={styles.testLabel}>
+              {t('settings.speech.elapsed', { ms: testElapsed })}
+            </Text>
           )}
         </div>
       </Field>
 
       {testResult && (
         <div>
-          <div className={styles.testLabel}>识别结果：</div>
+          <div className={styles.testLabel}>{t('settings.speech.result')}</div>
           <div className={styles.testResult}>{testResult}</div>
         </div>
       )}

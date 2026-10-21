@@ -4,6 +4,7 @@ import { join } from 'path'
 import { buildSystemPrompt, buildTidySystemPrompt } from '../src/shared/buildMessages'
 import { BUILTIN_BLOCKS } from '../src/shared/prompts/blocks'
 import { BUILTIN_TEMPLATES } from '../src/shared/prompts/templates'
+import { zh } from '../src/shared/i18n/catalog'
 
 /**
  * 音频文件转录的界面接线，以及 /命令 保留的接线。
@@ -38,7 +39,8 @@ describe('资料栏的音频标签', () => {
   })
 
   it('悬停提示写明了可以点击转录', () => {
-    expect(bar).toContain('点击转录，或拖到原文里引用')
+    expect(bar).toContain('resource.audioTooltip')
+    expect(zh['resource.audioTooltip']).toContain('点击转录，或拖到原文里引用')
   })
 
   it('文件删除按钮阻止冒泡（不然点叉会打开转录窗口）', () => {
@@ -70,16 +72,19 @@ describe('转录窗口', () => {
 
   it('未配置语音服务时不让开始', () => {
     expect(dialog).toContain('configured === true')
-    expect(dialog).toContain('还没有配置语音识别')
+    expect(dialog).toContain('audio.notConfigured')
+    expect(zh['audio.notConfigured']).toContain('还没有配置语音识别')
   })
 
   it('文件超过 25 MB 时提示先压缩', () => {
     expect(dialog).toContain('MAX_AUDIO_FILE_BYTES')
-    expect(dialog).toContain('请先压缩或截短')
+    expect(dialog).toContain('audio.tooLarge')
+    expect(zh['audio.tooLarge']).toContain('请先压缩或截短')
   })
 
   it('转录中可以取消', () => {
-    expect(dialog).toContain('取消转录')
+    expect(dialog).toContain('audio.cancel')
+    expect(zh['audio.cancel']).toBe('取消转录')
     expect(dialog).toContain('window.preface.cancelTranscribe()')
   })
 
@@ -94,9 +99,11 @@ describe('转录窗口', () => {
   })
 
   it('两个去向：作为语料、追加到原文', () => {
-    expect(dialog).toContain('作为语料添加')
+    expect(dialog).toContain('audio.addCorpus')
+    expect(zh['audio.addCorpus']).toBe('作为语料添加')
     expect(dialog).toContain('addCorpusToDraft(')
-    expect(dialog).toContain('追加到原文')
+    expect(dialog).toContain('audio.append')
+    expect(zh['audio.append']).toBe('追加到原文')
     expect(dialog).toContain('appendWithSpacing(')
   })
 
@@ -105,7 +112,7 @@ describe('转录窗口', () => {
   })
 
   it('空结果时提示，并禁用两个按钮', () => {
-    expect(dialog).toContain('EMPTY_RESULT_MESSAGE')
+    expect(dialog).toContain('audio.emptyResult')
     expect(dialog).toContain('phase === \'done\' && text')
   })
 
@@ -115,7 +122,8 @@ describe('转录窗口', () => {
   })
 
   it('说明音频会发给语音服务、程序不保存副本', () => {
-    expect(dialog).toContain('不保存音频副本')
+    expect(dialog).toContain('audio.hint')
+    expect(zh['audio.hint']).toContain('不保存音频副本')
   })
 })
 
@@ -186,16 +194,16 @@ describe('优化流程接上了命令校验', () => {
   const app = read('src/renderer/App.tsx')
 
   it('拿到结果后调用 buildCommandWarning', () => {
-    expect(optimize).toContain('buildCommandWarning(sourceText, text)')
+    expect(optimize).toContain('buildCommandWarning(sourceText, text, language)')
   })
 
   it('切换模式后也校验', () => {
-    expect(optimize).toContain('commandWarning: buildCommandWarning(sourceText, cleaned)')
+    expect(optimize).toContain('commandWarning: buildCommandWarning(sourceText, cleaned, language)')
   })
 
   it('只提示，没有为此再调一次模型', () => {
     // 命令校验前后不应该出现 callModel 的补救调用
-    const i = optimize.indexOf('buildCommandWarning(sourceText, text)')
+    const i = optimize.indexOf('buildCommandWarning(sourceText, text, language)')
     const around = optimize.slice(Math.max(0, i - 400), i + 400)
     expect(around).not.toContain('callModel(')
   })
@@ -212,7 +220,7 @@ describe('优化流程接上了命令校验', () => {
 })
 
 describe('整理时丢了命令先问一句', () => {
-  const hook = read('src/renderer/useLlmRun.ts')
+  const hook = read('src/renderer/useTextTransform.ts')
   const app = read('src/renderer/App.tsx')
 
   it('覆盖原文前先算 missingCommands', () => {
@@ -220,25 +228,28 @@ describe('整理时丢了命令先问一句', () => {
   })
 
   it('有缺失时不直接覆盖，先挂起等确认', () => {
-    const i = hook.indexOf('const missing = missingCommands(original, cleaned)')
-    const body = hook.slice(i, i + 400)
-    expect(body).toContain('setPendingCommand({ original, cleaned, missing })')
+    const i = hook.indexOf('const issues:', hook.indexOf('if (!cleaned)'))
+    const body = hook.slice(i, i + 800)
+    expect(body).toContain('setPending({')
     expect(body).toContain('return')
   })
 
   it('确认后才替换，并保留撤销', () => {
     expect(hook).toContain('confirmReplace')
-    expect(hook).toContain('setUndoText(pendingCommand.original)')
-    expect(hook).toContain('store.setIntentText(pendingCommand.cleaned)')
+    expect(hook).toContain('setUndoState({ text: original, kind, previousResultStale })')
+    expect(hook).toContain('store.setIntentText(replacement)')
+    expect(hook).toContain('store.restoreIntentText(undo.text, undo.previousResultStale)')
   })
 
   it('取消后原文保持不变', () => {
-    expect(hook).toContain('已保留原文')
+    expect(hook).toContain("t('notice.keptOriginal')")
+    const cancelBody = hook.slice(hook.indexOf('const cancelReplace'), hook.indexOf('const clearUndo'))
+    expect(cancelBody).not.toContain('setIntentText')
   })
 
   it('界面上有确认框', () => {
-    expect(app).toContain('整理结果里缺少命令')
-    expect(app).toContain('tidy.confirmReplace')
-    expect(app).toContain('tidy.cancelReplace')
+    expect(app).toContain('<ProtectedReplaceDialog')
+    expect(app).toContain('issues={transform.pending?.issues ?? []}')
+    expect(read('src/renderer/components/ProtectedReplaceDialog.tsx')).toContain("t('protected.title')")
   })
 })

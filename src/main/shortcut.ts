@@ -1,6 +1,7 @@
 import { dialog, globalShortcut } from 'electron'
 import { log } from './logger'
 import { toggleWindow } from './window'
+import { mainT, getUiLanguage } from './i18n'
 import { shortcutLabel } from '../shared/shortcutLabel'
 
 export { shortcutLabel }
@@ -35,10 +36,12 @@ export function registerShortcut(accelerator: string, options: { silent?: boolea
   if (!options.silent) {
     dialog.showMessageBox({
       type: 'warning',
-      title: '快捷键不可用',
-      message: `快捷键 ${shortcutLabel(accelerator)} 已被其他程序占用，暂时无法用它呼出窗口。`,
-      detail: '你可以在设置里换一个快捷键，或者先用托盘图标打开窗口。',
-      buttons: ['知道了']
+      title: mainT('shortcut.takenTitle'),
+      message: mainT('shortcut.takenMessage', {
+        shortcut: shortcutLabel(accelerator, getUiLanguage())
+      }),
+      detail: mainT('shortcut.takenDetail'),
+      buttons: [mainT('shortcut.ok')]
     })
   }
 

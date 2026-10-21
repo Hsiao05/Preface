@@ -8,6 +8,7 @@ import {
   DEFAULT_SPEECH_PRESET,
   TARGET_SAMPLE_RATE
 } from '../src/shared/speech'
+import { zh } from '../src/shared/i18n/catalog'
 import { startMockServer, type MockServer } from './fixtures/mockServer'
 
 /**
@@ -408,7 +409,8 @@ describe('麦克风按钮的位置和显示条件', () => {
 
   it('悬停提示写明了用法', () => {
     const mic = read('src/renderer/components/MicButton.tsx')
-    expect(mic).toContain('语音输入（点击开始，按任意键或点击鼠标停止）')
+    expect(mic).toContain("t('mic.tooltip')")
+    expect(zh['mic.tooltip']).toContain('语音输入（点击开始，按任意键或点击鼠标停止）')
   })
 })
 
@@ -467,10 +469,11 @@ describe('录音实现', () => {
     expect(recorder).not.toContain('require(')
   })
 
-  it('麦克风错误的提示是中文的', () => {
-    expect(recorder).toContain('麦克风权限被关闭')
-    expect(recorder).toContain('Windows 设置 → 隐私和安全性 → 麦克风')
-    expect(recorder).toContain('没有找到麦克风')
+  it('麦克风错误的提示跟随界面语言', () => {
+    expect(recorder).toContain("t('recorder.permission')")
+    expect(recorder).toContain("t('recorder.noMic')")
+    expect(zh['recorder.permission']).toContain('Windows 设置 → 隐私和安全性 → 麦克风')
+    expect(zh['recorder.noMic']).toBe('没有找到麦克风')
   })
 })
 
@@ -526,7 +529,7 @@ describe('插入文字', () => {
 
   it('结果为空时不插入', () => {
     const hook = read('src/renderer/useVoiceInput.ts')
-    expect(hook).toContain('EMPTY_RESULT_MESSAGE')
+    expect(hook).toContain("t('audio.emptyResult')")
     expect(hook).toContain('if (!text)')
   })
 
@@ -585,22 +588,22 @@ describe('设置页的语音标签', () => {
   const dialog = read('src/renderer/components/SettingsDialog.tsx')
 
   it('设置窗口里有"语音"标签', () => {
-    expect(dialog).toContain('<Tab value="speech">语音</Tab>')
+    expect(dialog).toContain('<Tab value="speech">{t(\'settings.tab.speech\')}</Tab>')
   })
 
   it('有全部要求的设置项', () => {
-    expect(tab).toContain('服务商预设')
+    expect(tab).toContain("t('settings.speech.preset')")
     expect(tab).toContain('Base URL')
     expect(tab).toContain('API Key')
-    expect(tab).toContain('模型')
-    expect(tab).toContain('接口类型')
-    expect(tab).toContain('识别语言')
-    expect(tab).toContain('最长录音时长')
+    expect(tab).toContain("t('settings.model.model')")
+    expect(tab).toContain("t('settings.speech.apiType')")
+    expect(tab).toContain("t('settings.speech.language')")
+    expect(tab).toContain("t('settings.speech.maxSeconds')")
   })
 
   it('有测试按钮，录 3 秒', () => {
     expect(tab).toContain('TEST_SECONDS = 3')
-    expect(tab).toContain('录 3 秒并识别')
+    expect(tab).toContain("t('settings.speech.recordTest', { seconds: TEST_SECONDS })")
   })
 
   it('测试会显示耗时', () => {

@@ -9,6 +9,9 @@ import {
 } from '@fluentui/react-components'
 import { Add20Regular, TextAdd20Regular, Settings20Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
+import { useT } from '../i18n'
+import { translate } from '../../shared/i18n'
+import { displayBuiltinName } from '../../shared/promptNames'
 import { CorpusDialog } from './CorpusDialog'
 import { addCorpusToDraft } from '../corpusActions'
 import type { ProfilesView, StyleItemView } from '../../preload/index'
@@ -67,6 +70,8 @@ interface TopBarProps {
 
 export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const uiLanguage = useStore((s) => s.uiLanguage)
   const { draft, styleId, setStyleId, setTarget } = useStore()
   const [corpusOpen, setCorpusOpen] = useState(false)
   // 正在编辑的语料。为 null 表示新建。
@@ -103,7 +108,10 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
   }, [])
 
   const currentProfile = profiles?.profiles.find((p) => p.id === profiles.currentId) ?? null
-  const currentStyleName = styleItems.find((s) => s.id === styleId)?.name ?? '清晰直接'
+  const currentStyle = styleItems.find((s) => s.id === styleId)
+  const currentStyleName = currentStyle
+    ? displayBuiltinName(currentStyle.id, currentStyle.name, t)
+    : displayBuiltinName(styleId, styleId, t)
 
   /** 切换当前使用的模型配置 */
   const switchProfile = async (id: string): Promise<void> => {
@@ -112,7 +120,9 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     const picked = next.profiles.find((p) => p.id === id)
     useStore.getState().setNotice({
       kind: 'success',
-      text: picked ? `已切换到「${picked.name}」` : '已切换模型'
+      text: picked
+        ? t('topBar.switchedTo', { name: picked.name })
+        : t('topBar.switchedModel')
     })
   }
 
@@ -143,7 +153,10 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
       setEditingCorpus(null)
       state.setNotice({
         kind: 'success',
-        text: `已更新语料 ${editingId}（${content.length.toLocaleString('zh-CN')} 字）`
+        text: t('topBar.corpusUpdated', {
+          id: editingId,
+          count: content.length.toLocaleString(uiLanguage === 'en' ? 'en-US' : 'zh-CN')
+        })
       })
       return
     }
@@ -152,7 +165,10 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
     const corpus = addCorpusToDraft(title, content, titleSource)
     state.setNotice({
       kind: 'success',
-      text: `已添加语料 ${corpus.id}（${content.length.toLocaleString('zh-CN')} 字）`
+      text: t('topBar.corpusAdded', {
+        id: corpus.id,
+        count: content.length.toLocaleString(uiLanguage === 'en' ? 'en-US' : 'zh-CN')
+      })
     })
   }
 
@@ -192,7 +208,7 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
           icon={<Add20Regular />}
           onClick={() => void handlePickFiles()}
         >
-          上传文件
+          {t('topBar.addFiles')}
         </Button>
         <Button
           className={styles.actionButton}
@@ -200,14 +216,14 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
           icon={<TextAdd20Regular />}
           onClick={openNewCorpus}
         >
-          粘贴语料
+          {t('topBar.pasteCorpus')}
         </Button>
 
         <div className={styles.spacer} />
 
         {/* 模型切换：配了多套时直接在这里换 */}
         <div className={styles.field}>
-          <span className={styles.label}>模型</span>
+          <span className={styles.label}>{t('topBar.model')}</span>
           <Dropdown
             className={styles.modelDropdown}
             size="small"
@@ -215,8 +231,8 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
               currentProfile
                 ? currentProfile.name
                 : profiles && profiles.profiles.length === 0
-                  ? '未配置'
-                  : '读取中'
+                  ? t('topBar.notConfigured')
+                  : t('topBar.loading')
             }
             selectedOptions={profiles?.currentId ? [profiles.currentId] : []}
             onOptionSelect={(_, data) => {
@@ -226,19 +242,19 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
             {(profiles?.profiles ?? []).map((p) => (
               <Option key={p.id} value={p.id} text={p.name}>
                 {p.name}
-                {p.model ? `（${p.model}）` : ''}
+                {p.model ? ` (${p.model})` : ''}
               </Option>
             ))}
             {(profiles?.profiles ?? []).length === 0 && (
               <Option value="__none" disabled>
-                还没有配置模型
+                {t('topBar.noModels')}
               </Option>
             )}
           </Dropdown>
         </div>
 
         <div className={styles.field}>
-          <span className={styles.label}>风格</span>
+          <span className={styles.label}>{t('topBar.style')}</span>
           <Dropdown
             className={styles.dropdown}
             size="small"
@@ -250,43 +266,47 @@ export function TopBar({ onOpenSettings }: TopBarProps): JSX.Element {
               // "我的风格"没有样本时不可选
               const myStyleBlocked =
                 style.id === 'my-style' && (!style.samples || style.samples.length === 0)
+              const name = displayBuiltinName(style.id, style.name, t)
 
               return (
                 <Option
                   key={style.id}
                   value={style.id}
                   disabled={myStyleBlocked}
-                  text={myStyleBlocked ? '请先在设置中添加风格样本' : style.name}
+                  text={myStyleBlocked ? t('topBar.addSamplesFirst') : name}
                 >
-                  {myStyleBlocked ? '我的风格（请先在设置中添加风格样本）' : style.name}
+                  {myStyleBlocked ? t('topBar.myStyleNeedsSamples') : name}
                 </Option>
               )
             })}
             {styleItems.length === 0 && (
-              <Option value="clear-direct">清晰直接</Option>
+              <Option value="clear-direct">
+                {displayBuiltinName('clear-direct', 'clear-direct', t)}
+              </Option>
             )}
           </Dropdown>
         </div>
 
         <div className={styles.field}>
-          <span className={styles.label}>目标</span>
+          <span className={styles.label}>{t('topBar.target')}</span>
           <Dropdown
             className={styles.dropdown}
             size="small"
             selectedOptions={[draft.target]}
-            value={draft.target === 'local' ? '本地 Agent' : '网页端'}
+            value={draft.target === 'local' ? t('topBar.localAgent') : t('topBar.web')}
             onOptionSelect={(_, data) => setTarget(data.optionValue as Target)}
           >
-            <Option value="local">本地 Agent</Option>
-            <Option value="web">网页端</Option>
+            <Option value="local">{t('topBar.localAgent')}</Option>
+            <Option value="web">{t('topBar.web')}</Option>
           </Dropdown>
         </div>
 
-        <Tooltip content="设置" relationship="label">
+        <Tooltip content={t('topBar.settings')} relationship="label">
           <Button
             appearance="subtle"
             icon={<Settings20Regular />}
             onClick={onOpenSettings}
+            aria-label={t('topBar.settings')}
           />
         </Tooltip>
       </div>
@@ -320,11 +340,17 @@ export async function addPathsToDraft(paths: string[]): Promise<void> {
   }
 
   if (skipped.length > 0 && added.length === 0) {
-    state.setNotice({ kind: 'warning', text: '这些文件已经添加过了，或者文件不存在。' })
+    state.setNotice({
+      kind: 'warning',
+      text: translate(state.uiLanguage, 'topBar.filesAlreadyAdded')
+    })
   } else if (skipped.length > 0) {
     state.setNotice({
       kind: 'info',
-      text: `已添加 ${added.length} 个文件，跳过 ${skipped.length} 个重复或不存在的。`
+      text: translate(state.uiLanguage, 'topBar.filesAddedSkipped', {
+        added: added.length,
+        skipped: skipped.length
+      })
     })
   }
 }

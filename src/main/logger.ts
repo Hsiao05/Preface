@@ -47,7 +47,7 @@ export function logError(message: string, error?: unknown): void {
 
 /** 把 Key 打码，只留前 4 位和后 4 位 */
 export function maskKey(key: string): string {
-  if (!key) return '(空)'
+  if (!key) return '(empty)'
   if (key.length <= 8) return '****'
   return `${key.slice(0, 4)}****${key.slice(-4)}`
 }

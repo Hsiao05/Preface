@@ -12,6 +12,7 @@ import {
   type UsageInfo
 } from '../../shared/sse'
 import { describeHttpError, describeNetworkError, type LlmError } from '../../shared/llmErrors'
+import { getUiLanguage, mainT } from '../i18n'
 import { saveProfile, type ModelProfile } from '../profiles'
 
 /**
@@ -129,7 +130,7 @@ async function performChat(
   try {
     if (!response.ok) {
       const text = await safeReadText(response)
-      throw new LlmRequestError(describeHttpError(response.status, text))
+      throw new LlmRequestError(describeHttpError(response.status, text, getUiLanguage()))
     }
 
     if (!stream) {
@@ -140,12 +141,12 @@ async function performChat(
   } catch (error) {
     // 流读到一半被取消或超时，给出对应的中文提示
     if (signal?.aborted) {
-      throw new LlmRequestError({ message: '请求已取消' })
+      throw new LlmRequestError({ message: mainT('error.cancelled') })
     }
     if (handle.didTimeout()) {
       throw new LlmRequestError({
-        message: '请求超时',
-        suggestion: '服务商响应太慢。可以稍后再试，或在设置里把超时时间调长。'
+        message: mainT('error.timeout'),
+        suggestion: mainT('error.timeoutHint')
       })
     }
     throw error
@@ -229,7 +230,7 @@ async function sendRequest(input: SendRequestInput): Promise<RequestHandle> {
 
   // 调用前就已经被取消（例如用户连点了两次取消），直接返回
   if (signal?.aborted) {
-    throw new LlmRequestError({ message: '请求已取消' })
+    throw new LlmRequestError({ message: mainT('error.cancelled') })
   }
 
   const controller = new AbortController()
@@ -273,15 +274,15 @@ async function sendRequest(input: SendRequestInput): Promise<RequestHandle> {
     cleanup()
     // 用户主动取消时，给出明确的错误而不是网络错误
     if (signal?.aborted) {
-      throw new LlmRequestError({ message: '请求已取消' })
+      throw new LlmRequestError({ message: mainT('error.cancelled') })
     }
     if (timedOut) {
       throw new LlmRequestError({
-        message: '请求超时',
-        suggestion: '服务商响应太慢。可以稍后再试，或在设置里把超时时间调长。'
+        message: mainT('error.timeout'),
+        suggestion: mainT('error.timeoutHint')
       })
     }
-    throw new LlmRequestError(describeNetworkError(error))
+    throw new LlmRequestError(describeNetworkError(error, getUiLanguage()))
   }
 }
 
@@ -377,7 +378,7 @@ async function parseStream(
 ): Promise<RunResult> {
   const body = response.body
   if (!body) {
-    throw new LlmRequestError({ message: '服务商没有返回内容' })
+    throw new LlmRequestError({ message: mainT('error.emptyProviderResponse') })
   }
 
   const reader = body.getReader()
@@ -481,7 +482,7 @@ async function parseStream(
       log(`流式读取中断，但已收到 ${text.length} 字，保留这部分`)
       return { text, usage: sawUsage ? usage : null, sawReasoning, truncated, reasoningTokens: 0 }
     }
-    throw new LlmRequestError(describeNetworkError(error))
+    throw new LlmRequestError(describeNetworkError(error, getUiLanguage()))
   } finally {
     reader.releaseLock()
   }
@@ -545,12 +546,12 @@ export async function listModels(profile: ModelProfile, apiKey: string): Promise
     try {
       response = await httpFetch(nextUrl, { headers })
     } catch (error) {
-      throw new LlmRequestError(describeNetworkError(error))
+      throw new LlmRequestError(describeNetworkError(error, getUiLanguage()))
     }
 
     if (!response.ok) {
       const text = await safeReadText(response)
-      throw new LlmRequestError(describeHttpError(response.status, text))
+      throw new LlmRequestError(describeHttpError(response.status, text, getUiLanguage()))
     }
 
     const json = (await response.json()) as Record<string, unknown>
@@ -601,7 +602,7 @@ export async function testConnection(
     const result = await runChat({
       profile,
       apiKey,
-      messages: [{ role: 'user', content: '回复"好"这一个字，不要输出别的。' }],
+      messages: [{ role: 'user', content: 'Reply with the single word "OK" and nothing else.' }],
       stream: false,
       maxTokens: 512,
       temperature: 0
@@ -613,17 +614,16 @@ export async function testConnection(
         return {
           ok: false,
           error: {
-            message: '连接成功，但这是个推理模型，本次回答被推理过程占满了',
-            suggestion:
-              '模型本身可用。建议换一个非推理模型（例如 deepseek-chat），响应更快也更省。'
+            message: mainT('error.testReasoningExhausted'),
+            suggestion: mainT('error.testReasoningExhaustedHint')
           }
         }
       }
       return {
         ok: false,
         error: {
-          message: '连接成功，但模型没有返回内容',
-          suggestion: '请检查模型名是否正确，或换一个模型试试。'
+          message: mainT('error.testEmpty'),
+          suggestion: mainT('error.testEmptyHint')
         }
       }
     }
@@ -633,6 +633,6 @@ export async function testConnection(
     if (error instanceof LlmRequestError) {
       return { ok: false, error: error.info }
     }
-    return { ok: false, error: describeNetworkError(error) }
+    return { ok: false, error: describeNetworkError(error, getUiLanguage()) }
   }
 }

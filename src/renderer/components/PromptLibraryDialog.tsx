@@ -24,12 +24,13 @@ import {
   Sparkle16Regular
 } from '@fluentui/react-icons'
 import {
-  PROMPT_MODE_LABELS,
-  normalizePromptTitle,
   type PromptLibraryItem,
   type PromptUsageMode
 } from '../../shared/promptLibrary'
+import { displayPromptTitle } from '../../shared/promptNames'
 import { useTitle } from '../useTitle'
+import { useT, useUiLanguage } from '../i18n'
+import { formatNumber } from '../format'
 import {
   beginTitleRequest,
   createTitleState,
@@ -345,6 +346,8 @@ function isDirty(draft: DraftState, saved: PromptLibraryItem | undefined): boole
 
 export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const language = useUiLanguage()
   const [items, setItems] = useState<PromptLibraryItem[]>([])
   const [draft, setDraft] = useState<DraftState>(blankDraft)
   const [usageMode, setUsageMode] = useState<PromptUsageMode>('reference')
@@ -452,7 +455,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
   /** 保存当前条目 */
   const save = async (): Promise<PromptLibraryItem | null> => {
     if (!draft.content.trim()) {
-      setSaveError('正文不能为空。')
+      setSaveError(t('promptLibrary.contentEmpty'))
       return null
     }
 
@@ -564,7 +567,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
       >
         <DialogSurface className={styles.surface}>
           <DialogBody className={styles.body}>
-            <DialogTitle>我的Prompt库</DialogTitle>
+            <DialogTitle>{t('promptLibrary.title')}</DialogTitle>
             <DialogContent className={styles.content}>
               <div className={styles.list}>
                 <Button
@@ -573,20 +576,20 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                   icon={<Add20Regular />}
                   onClick={createNew}
                 >
-                  新建 Prompt
+                  {t('promptLibrary.new')}
                 </Button>
 
                 <div className={styles.listScroll}>
                   {loadError && <div className={styles.error}>{loadError}</div>}
                   {!loadError && items.length === 0 && (
                     <div className={styles.empty}>
-                      还没有保存的 Prompt。
+                      {t('promptLibrary.emptyLine1')}
                       <br />
-                      把常用的工作指令存在这里，下次直接套用。
+                      {t('promptLibrary.emptyLine2')}
                     </div>
                   )}
                   {items.map((item) => {
-                    const title = normalizePromptTitle(item.title)
+                    const title = displayPromptTitle(item.title, t)
                     const active = item.id === draft.id
                     return (
                       <button
@@ -601,7 +604,9 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                       >
                         <span className={styles.listItemTitle}>{title}</span>
                         <span className={styles.listItemMeta}>
-                          {Array.from(item.content).length.toLocaleString('zh-CN')} 字
+                          {t('promptLibrary.charCount', {
+                            count: formatNumber(Array.from(item.content).length, language)
+                          })}
                         </span>
                       </button>
                     )
@@ -610,24 +615,24 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
               </div>
 
               <div className={styles.editor}>
-                <Field label="标题">
+                <Field label={t('promptLibrary.titleLabel')}>
                   <div className={styles.titleRow}>
                     <Input
                       className={styles.titleInput}
                       value={draft.title}
                       onChange={(_, data) => changeTitle(data.value)}
-                      placeholder="例如：会议纪要整理"
+                      placeholder={t('promptLibrary.titlePlaceholder')}
                     />
                     <Button
                       icon={generating ? <Spinner size="tiny" /> : <Sparkle16Regular />}
                       disabled={generating || !draft.content.trim() || !canEdit}
                       onClick={() => void generateScenarioTitle()}
                     >
-                      AI总结适用场景
+                      {t('promptLibrary.generateTitle')}
                     </Button>
                     {generating && (
                       <Button appearance="subtle" icon={<Dismiss16Regular />} onClick={cancel}>
-                        取消生成
+                        {t('corpus.cancelGenerate')}
                       </Button>
                     )}
                   </div>
@@ -635,7 +640,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
 
                 <div className={styles.field}>
                   <label className={styles.fieldLabel} htmlFor="prompt-content">
-                    正文
+                    {t('promptLibrary.contentLabel')}
                   </label>
                   <div className={styles.textareaBox}>
                     <textarea
@@ -643,7 +648,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                       className={styles.textarea}
                       value={draft.content}
                       onChange={(event) => changeContent(event.target.value)}
-                      placeholder="把成熟的提示词粘贴到这里"
+                      placeholder={t('promptLibrary.contentPlaceholder')}
                       spellCheck={false}
                     />
                   </div>
@@ -659,20 +664,20 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                     onClick={requestDelete}
                     disabled={saving}
                   >
-                    删除
+                    {t('common.delete')}
                   </Button>
                   <Button
                     icon={<Save20Regular />}
                     onClick={() => void save()}
                     disabled={saving || !draft.content.trim()}
                   >
-                    {saving ? '保存中…' : '保存'}
+                    {saving ? t('common.saving') : t('common.save')}
                   </Button>
                 </div>
 
                 <div className={styles.usageRow}>
                   <span className={styles.usageLabel} id="prompt-usage-label">
-                    使用方式
+                    {t('promptLibrary.usage')}
                   </span>
                   <RadioGroup
                     layout="horizontal"
@@ -680,15 +685,15 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                     value={usageMode}
                     onChange={(_, data) => setUsageMode(data.value as PromptUsageMode)}
                   >
-                    <Radio value="reference" label={PROMPT_MODE_LABELS.reference} />
-                    <Radio value="template" label={PROMPT_MODE_LABELS.template} />
+                    <Radio value="reference" label={t('prompt.mode.reference')} />
+                    <Radio value="template" label={t('prompt.mode.template')} />
                   </RadioGroup>
                 </div>
                 <div className={styles.hint}>
                   {usageMode === 'reference'
-                    ? '只借鉴章节、步骤、语气和详略，任务内容以原文为准。'
-                    : '保留模板的章节顺序、固定文案和格式，用原文和澄清回答填入任务部分。'}
-                  {busy && ' 当前这一轮已经开始，这次选择从下次优化起生效。'}
+                    ? t('promptLibrary.usageReferenceHint')
+                    : t('promptLibrary.usageTemplateHint')}
+                  {busy && ` ${t('promptLibrary.busyHint')}`}
                 </div>
               </div>
             </DialogContent>
@@ -699,7 +704,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                 appearance="secondary"
                 onClick={requestClose}
               >
-                关闭
+                {t('common.close')}
               </Button>
               <div className={styles.footerActions}>
                 <Button
@@ -708,7 +713,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                   onClick={() => void handleAppend()}
                   disabled={saving || !canEdit || !draft.content.trim()}
                 >
-                  追加到原文
+                  {t('promptLibrary.append')}
                 </Button>
                 <Button
                   className={styles.footerPrimary}
@@ -716,7 +721,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                   onClick={() => void handleUse()}
                   disabled={saving || !draft.content.trim()}
                 >
-                  使用这个 Prompt
+                  {t('promptLibrary.use')}
                 </Button>
               </div>
             </DialogActions>
@@ -731,13 +736,11 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
       >
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>还有修改没有保存</DialogTitle>
-            <DialogContent>
-              这条 Prompt 的修改还没有保存。保存后关闭，还是放弃修改？
-            </DialogContent>
+            <DialogTitle>{t('dialog.unsaved.title')}</DialogTitle>
+            <DialogContent>{t('dialog.unsaved.body')}</DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={confirmClose}>
-                放弃修改
+                {t('dialog.unsaved.discard')}
               </Button>
               <Button
                 appearance="primary"
@@ -750,7 +753,7 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
                   })()
                 }}
               >
-                保存并关闭
+                {t('dialog.unsaved.saveClose')}
               </Button>
             </DialogActions>
           </DialogBody>
@@ -761,17 +764,18 @@ export function PromptLibraryDialog({ open, onClose, onAppend, onUse, busy }: Pr
       <Dialog open={pendingDelete} onOpenChange={(_, data) => !data.open && setPendingDelete(false)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>删除这条 Prompt？</DialogTitle>
+            <DialogTitle>{t('promptLibrary.deleteTitle')}</DialogTitle>
             <DialogContent>
-              「{normalizePromptTitle(draft.title)}」会从库里删除，无法恢复。
-              已经恢复到草稿里的选择不受影响。
+              {t('promptLibrary.deleteBody', {
+                title: displayPromptTitle(draft.title, t)
+              })}
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setPendingDelete(false)}>
-                取消
+                {t('common.cancel')}
               </Button>
               <Button appearance="primary" onClick={() => void remove()}>
-                删除
+                {t('common.delete')}
               </Button>
             </DialogActions>
           </DialogBody>

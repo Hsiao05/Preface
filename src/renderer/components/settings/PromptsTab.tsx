@@ -33,6 +33,9 @@ import { useStore } from '../../store'
 import { estimateTokens } from '../../../shared/estimateTokens'
 import { buildSystemPrompt } from '../../../shared/buildMessages'
 import { toOverrides } from '../../usePromptOverrides'
+import { useT, useUiLanguage } from '../../i18n'
+import { formatNumber } from '../../format'
+import { displayBuiltinName } from '../../../shared/promptNames'
 import type { StyleItemView } from '../../../preload/index'
 
 /**
@@ -50,7 +53,7 @@ const useStyles = makeStyles({
     minHeight: 0
   },
   sidebar: {
-    width: '200px',
+    width: '220px',
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
@@ -259,6 +262,8 @@ interface Props {
 
 export function PromptsTab({ onNotice }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
+  const language = useUiLanguage()
   const [items, setItems] = useState<StyleItemView[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftText, setDraftText] = useState('')
@@ -314,6 +319,9 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     return a !== b
   }, [selected, draftText, draftSamples])
 
+  /** 内置项按当前界面语言显示，用户自建的项用存储名 */
+  const nameOf = (item: StyleItemView): string => displayBuiltinName(item.id, item.name, t)
+
   /** 保存 */
   const save = async (): Promise<void> => {
     if (!selected) return
@@ -326,7 +334,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     await reload(selected.id)
     // 通知主窗口刷新提示词
     window.dispatchEvent(new Event('preface:styles-changed'))
-    onNotice({ kind: 'success', text: `已保存「${selected.name}」。` })
+    onNotice({ kind: 'success', text: t('settings.prompts.saved', { name: nameOf(selected) }) })
   }
 
   /** 恢复默认 */
@@ -335,19 +343,26 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     await window.preface.resetStyle(selected.id)
     await reload(selected.id)
     window.dispatchEvent(new Event('preface:styles-changed'))
-    onNotice({ kind: 'success', text: `已把「${selected.name}」恢复为默认。` })
+    onNotice({
+      kind: 'success',
+      text: t('settings.prompts.resetDone', { name: nameOf(selected) })
+    })
   }
 
   /** 复制为新风格 */
   const duplicate = async (): Promise<void> => {
     if (!selected) return
     const id = `custom-${Date.now().toString(36)}`
-    await window.preface.duplicateStyle(selected.id, id, newName.trim() || `${selected.name}（副本）`)
+    await window.preface.duplicateStyle(
+      selected.id,
+      id,
+      newName.trim() || t('settings.prompts.copyName', { name: nameOf(selected) })
+    )
     setDuplicateOpen(false)
     setNewName('')
     await reload(id)
     window.dispatchEvent(new Event('preface:styles-changed'))
-    onNotice({ kind: 'success', text: '已复制为新风格。' })
+    onNotice({ kind: 'success', text: t('settings.prompts.duplicated') })
   }
 
   /** 删除（只能删用户新建的） */
@@ -355,13 +370,13 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     if (!selected) return
     const result = await window.preface.deleteStyle(selected.id)
     if (!result.ok) {
-      onNotice({ kind: 'warning', text: '内置项不能删除。' })
+      onNotice({ kind: 'warning', text: t('settings.prompts.builtinNoDelete') })
       return
     }
     setSelectedId(null)
     await reload()
     window.dispatchEvent(new Event('preface:styles-changed'))
-    onNotice({ kind: 'success', text: '已删除。' })
+    onNotice({ kind: 'success', text: t('settings.prompts.deleted') })
   }
 
   /** 导出：生成 JSON 文件让用户保存 */
@@ -375,7 +390,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     link.download = 'preface-prompts.json'
     link.click()
     URL.revokeObjectURL(url)
-    onNotice({ kind: 'success', text: '已导出。' })
+    onNotice({ kind: 'success', text: t('settings.prompts.exported') })
   }
 
   /** 导入：选文件读内容 */
@@ -391,7 +406,12 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       const result = await window.preface.importStyles(json)
 
       if (!result.ok) {
-        onNotice({ kind: 'warning', text: result.error ?? '导入失败。' })
+        onNotice({
+          kind: 'warning',
+          text: result.error
+            ? t('settings.prompts.importFailedWith', { message: result.error })
+            : t('settings.prompts.importFailed')
+        })
         return
       }
 
@@ -405,7 +425,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       await window.preface.applyImport(result.items, true)
       await reload()
       window.dispatchEvent(new Event('preface:styles-changed'))
-      onNotice({ kind: 'success', text: '已导入。' })
+      onNotice({ kind: 'success', text: t('settings.prompts.imported') })
     }
     input.click()
   }
@@ -417,7 +437,12 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
     setImportConflicts([])
     await reload()
     window.dispatchEvent(new Event('preface:styles-changed'))
-    onNotice({ kind: 'success', text: overwrite ? '已覆盖导入。' : '已另存为新项。' })
+    onNotice({
+      kind: 'success',
+      text: overwrite
+        ? t('settings.prompts.importOverwritten')
+        : t('settings.prompts.importSavedNew')
+    })
   }
 
   /** 完整预览：按当前风格组装系统提示词 */
@@ -478,7 +503,9 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
           trackStream: false,
           onDelta: (chunk) => setTryOutput((prev) => prev + chunk),
           onUsage: (usage) => {
-            usageText = `本次约 ${formatTokenCount((usage.input ?? 0) + (usage.output ?? 0))} tokens`
+            usageText = t('status.tokens', {
+              count: formatTokenCount((usage.input ?? 0) + (usage.output ?? 0))
+            })
           },
           onDone: (text) => {
             // 解析出行协议，只显示结果部分
@@ -490,24 +517,27 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       )
 
       if (outcome === null) {
-        setTryOutput('（没有返回内容）')
+        setTryOutput(t('settings.prompts.tryEmpty'))
       }
     } finally {
       setTryRunning(false)
     }
   }
 
-  if (!items) return <Spinner label="正在读取" />
+  if (!items) return <Spinner label={t('settings.prompts.loading')} />
 
   const isLocked = selected?.id === LOCKED_BLOCK_ID
   const currentTokens = estimateTokens(draftText)
+  // 翻译和优化表达不经过优化流程，试用区对它们会误导
+  const tryUnavailable =
+    selected?.id === 'translate' || selected?.id === 'expression'
 
   /** 左侧列表分组 */
   const groups: Array<{ title: string; filter: (i: StyleItemView) => boolean }> = [
-    { title: '优化系统提示词', filter: (i) => i.kind === 'block' },
-    { title: '独立模板', filter: (i) => i.kind === 'template' },
-    { title: '表达风格', filter: (i) => i.kind === 'style' },
-    { title: '附加', filter: (i) => i.kind === 'extra' }
+    { title: t('settings.prompts.groupBlocks'), filter: (i) => i.kind === 'block' },
+    { title: t('settings.prompts.groupTemplates'), filter: (i) => i.kind === 'template' },
+    { title: t('settings.prompts.groupStyles'), filter: (i) => i.kind === 'style' },
+    { title: t('settings.prompts.groupExtra'), filter: (i) => i.kind === 'extra' }
   ]
 
   return (
@@ -527,10 +557,12 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                     className={`${styles.item} ${item.id === selectedId ? styles.itemActive : ''}`}
                     onClick={() => select(item)}
                   >
-                    <span>{item.name}</span>
-                    {item.hasBuiltinUpdate && <span className={styles.editedMark}>有更新</span>}
+                    <span>{nameOf(item)}</span>
+                    {item.hasBuiltinUpdate && (
+                      <span className={styles.editedMark}>{t('common.hasUpdate')}</span>
+                    )}
                     {item.edited && !item.hasBuiltinUpdate && (
-                      <span className={styles.editedMark}>已改</span>
+                      <span className={styles.editedMark}>{t('common.changed')}</span>
                     )}
                   </div>
                 ))}
@@ -543,16 +575,22 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
           {selected ? (
             <>
               <div className={styles.editorTitle}>
-                <span className={styles.title}>{selected.name}</span>
-                {selected.id === LOCKED_BLOCK_ID && <Text size={200}>（锁定，不可修改）</Text>}
+                <span className={styles.title}>{nameOf(selected)}</span>
+                {selected.id === LOCKED_BLOCK_ID && (
+                  <Text size={200}>{t('settings.prompts.locked')}</Text>
+                )}
               </div>
+
+              {selected.id === 'translate' && (
+                <MessageBar intent="info">
+                  <MessageBarBody>{t('settings.language.hint')}</MessageBarBody>
+                </MessageBar>
+              )}
 
               {isLocked ? (
                 <>
                   <MessageBar intent="info">
-                    <MessageBarBody>
-                      程序依赖这段格式来读取结果，所以不能修改。
-                    </MessageBarBody>
+                    <MessageBarBody>{t('settings.prompts.lockedNotice')}</MessageBarBody>
                   </MessageBar>
                   <div className={styles.textareaBox}>
                     <div className={styles.readonly}>{draftText}</div>
@@ -562,14 +600,12 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                 <>
                   {selected.hasBuiltinUpdate && (
                     <MessageBar intent="warning">
-                      <MessageBarBody>
-                        内置版本有更新。你可以保留自己的修改，也可以替换为新版。
-                      </MessageBarBody>
+                      <MessageBarBody>{t('settings.prompts.updateNotice')}</MessageBarBody>
                       <Button
                         size="small"
                         onClick={() => void window.preface.resetStyle(selected.id).then(() => reload(selected.id))}
                       >
-                        替换为新版
+                        {t('settings.prompts.replaceNew')}
                       </Button>
                     </MessageBar>
                   )}
@@ -584,15 +620,17 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                   </div>
 
                   <div className={styles.tokenLine}>
-                    约 {currentTokens} tokens
-                    {selected.kind === 'style' && ' （风格说明每次调用都会发送，建议控制在 80 字以内）'}
+                    {t('settings.prompts.tokenCount', {
+                      count: formatNumber(currentTokens, language)
+                    })}
+                    {selected.kind === 'style' && ` ${t('settings.prompts.styleTokenHint')}`}
                   </div>
 
                   {/* 风格才有样本 */}
                   {selected.kind === 'style' && (
                     <Field
-                      label="风格样本"
-                      hint="最多 3 段，每段不超过 800 字。样本每次调用都会发送，通常两段就够了。"
+                      label={t('settings.prompts.samples')}
+                      hint={t('settings.prompts.samplesHint')}
                     >
                       <div className={styles.samples}>
                         {draftSamples.map((sample, index) => (
@@ -605,13 +643,13 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                                 next[index] = event.target.value
                                 setDraftSamples(next)
                               }}
-                              placeholder={`样本 ${index + 1}`}
+                              placeholder={t('settings.prompts.sampleN', { n: index + 1 })}
                               spellCheck={false}
                             />
                             <Button
                               appearance="subtle"
                               icon={<Delete20Regular />}
-                              aria-label="删除这段样本"
+                              aria-label={t('settings.prompts.deleteSample')}
                               onClick={() =>
                                 setDraftSamples(draftSamples.filter((_, i) => i !== index))
                               }
@@ -625,7 +663,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                             size="small"
                             onClick={() => setDraftSamples([...draftSamples, ''])}
                           >
-                            添加样本
+                            {t('settings.prompts.addSample')}
                           </Button>
                         )}
                       </div>
@@ -633,9 +671,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                   )}
 
                   {selected.id === 'my-style' && (
-                    <div className={styles.tokenLine}>
-                      粘贴两段你自己写过、并且满意的需求或提示词。有样本之后，「我的风格」就能在顶栏选用了。
-                    </div>
+                    <div className={styles.tokenLine}>{t('settings.prompts.myStyleHint')}</div>
                   )}
 
                   <div className={styles.buttonRow}>
@@ -645,7 +681,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                       disabled={!dirty}
                       onClick={() => void save()}
                     >
-                      保存
+                      {t('common.save')}
                     </Button>
 
                     {selected.builtin && (
@@ -654,7 +690,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                         onClick={() => void reset()}
                         disabled={!selected.edited && !selected.hasBuiltinUpdate}
                       >
-                        恢复默认
+                        {t('settings.prompts.resetDefault')}
                       </Button>
                     )}
 
@@ -662,11 +698,13 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                       <Button
                         icon={<Copy20Regular />}
                         onClick={() => {
-                          setNewName(`${selected.name}（副本）`)
+                          setNewName(
+                            t('settings.prompts.copyName', { name: nameOf(selected) })
+                          )
                           setDuplicateOpen(true)
                         }}
                       >
-                        复制为新风格
+                        {t('settings.prompts.duplicate')}
                       </Button>
                     )}
 
@@ -675,7 +713,7 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
                         icon={<Delete20Regular />}
                         onClick={() => void remove()}
                       >
-                        删除
+                        {t('common.delete')}
                       </Button>
                     )}
                   </div>
@@ -683,45 +721,48 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
               )}
             </>
           ) : (
-            <Text>从左边选一项来编辑。</Text>
+            <Text>{t('settings.prompts.selectPrompt')}</Text>
           )}
 
           {/* 试用区：用当前编辑中的提示词跑一次，不影响主窗口草稿 */}
-          <div className={styles.tryArea}>
-            <Field
-              label="试用"
-              hint="用当前编辑中的提示词跑一次，看看效果。不影响主窗口的草稿，也不用先保存。"
-            >
-              <Input
-                value={tryInput}
-                onChange={(_, d) => setTryInput(d.value)}
-                placeholder="输入一段示例需求，例如：帮我改改这个文档"
-                disabled={tryRunning}
-              />
-            </Field>
+          {tryUnavailable ? (
+            <MessageBar intent="info">
+              <MessageBarBody>{t('settings.prompts.tryUnavailable')}</MessageBarBody>
+            </MessageBar>
+          ) : (
+            <div className={styles.tryArea}>
+              <Field label={t('settings.prompts.try')} hint={t('settings.prompts.tryHint')}>
+                <Input
+                  value={tryInput}
+                  onChange={(_, d) => setTryInput(d.value)}
+                  placeholder={t('settings.prompts.tryPlaceholder')}
+                  disabled={tryRunning}
+                />
+              </Field>
 
-            <div className={styles.buttonRow}>
-              <Button
-                appearance="primary"
-                icon={<Play20Regular />}
-                disabled={tryRunning || !tryInput.trim()}
-                onClick={() => void tryRun()}
-              >
-                {tryRunning ? '正在试…' : '试一下'}
-              </Button>
-              {tryUsage && <span className={styles.tokenLine}>{tryUsage}</span>}
+              <div className={styles.buttonRow}>
+                <Button
+                  appearance="primary"
+                  icon={<Play20Regular />}
+                  disabled={tryRunning || !tryInput.trim()}
+                  onClick={() => void tryRun()}
+                >
+                  {tryRunning ? t('settings.prompts.trying') : t('settings.prompts.tryButton')}
+                </Button>
+                {tryUsage && <span className={styles.tokenLine}>{tryUsage}</span>}
+              </div>
+
+              {tryOutput && <div className={styles.tryResult}>{tryOutput}</div>}
             </div>
-
-            {tryOutput && <div className={styles.tryResult}>{tryOutput}</div>}
-          </div>
+          )}
 
           {/* 底部：预览与导入导出 */}
           <div className={styles.buttonRow}>
             <Button icon={<Eye20Regular />} onClick={() => setPreviewOpen(true)}>
-              预览完整系统提示词
+              {t('settings.prompts.preview')}
             </Button>
-            <Button onClick={() => void exportAll()}>导出</Button>
-            <Button onClick={importFile}>导入</Button>
+            <Button onClick={() => void exportAll()}>{t('settings.prompts.export')}</Button>
+            <Button onClick={importFile}>{t('settings.prompts.import')}</Button>
           </div>
         </div>
       </div>
@@ -730,19 +771,24 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       <Dialog open={previewOpen} onOpenChange={(_, d) => !d.open && setPreviewOpen(false)}>
         <DialogSurface style={{ maxWidth: '760px', width: '90vw' }}>
           <DialogBody>
-            <DialogTitle>完整系统提示词</DialogTitle>
+            <DialogTitle>{t('settings.prompts.previewTitle')}</DialogTitle>
             <DialogContent>
               <div className={styles.tokenLine} style={{ marginBottom: '8px' }}>
-                共约 {preview.tokens} tokens
+                {t('settings.prompts.previewTokens', {
+                  count: formatNumber(preview.tokens, language)
+                })}
                 {preview.tokens > 1500 && (
-                  <span className={styles.tokenWarn}> · 提示词较长，每次优化都会多消耗 Token</span>
+                  <span className={styles.tokenWarn}>
+                    {' · '}
+                    {t('settings.prompts.previewLong')}
+                  </span>
                 )}
               </div>
               <div className={styles.preview}>{preview.text}</div>
             </DialogContent>
             <DialogActions>
               <Button appearance="primary" onClick={() => setPreviewOpen(false)}>
-                关闭
+                {t('common.close')}
               </Button>
             </DialogActions>
           </DialogBody>
@@ -753,18 +799,18 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       <Dialog open={duplicateOpen} onOpenChange={(_, d) => !d.open && setDuplicateOpen(false)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>复制为新风格</DialogTitle>
+            <DialogTitle>{t('settings.prompts.copyTitle')}</DialogTitle>
             <DialogContent>
-              <Field label="新风格的名称">
+              <Field label={t('settings.prompts.copyNameLabel')}>
                 <Input value={newName} onChange={(_, d) => setNewName(d.value)} />
               </Field>
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setDuplicateOpen(false)}>
-                取消
+                {t('common.cancel')}
               </Button>
               <Button appearance="primary" onClick={() => void duplicate()}>
-                创建
+                {t('common.create')}
               </Button>
             </DialogActions>
           </DialogBody>
@@ -775,17 +821,21 @@ export function PromptsTab({ onNotice }: Props): JSX.Element {
       <Dialog open={importOpen} onOpenChange={(_, d) => !d.open && setImportOpen(false)}>
         <DialogSurface>
           <DialogBody>
-            <DialogTitle>导入提示词</DialogTitle>
+            <DialogTitle>{t('settings.prompts.importTitle')}</DialogTitle>
             <DialogContent>
-              文件里有 {importConflicts.length} 项和现有内容重名。你想覆盖现有的，还是另存为新项？
+              {t('settings.prompts.importConflict', {
+                count: formatNumber(importConflicts.length, language)
+              })}
             </DialogContent>
             <DialogActions>
               <Button appearance="secondary" onClick={() => setImportOpen(false)}>
-                取消
+                {t('common.cancel')}
               </Button>
-              <Button onClick={() => void confirmImport(false)}>另存为新项</Button>
+              <Button onClick={() => void confirmImport(false)}>
+                {t('settings.prompts.saveAsNew')}
+              </Button>
               <Button appearance="primary" onClick={() => void confirmImport(true)}>
-                覆盖
+                {t('common.replace')}
               </Button>
             </DialogActions>
           </DialogBody>

@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import { makeStyles, tokens } from '@fluentui/react-components'
+import { useT } from '../../i18n'
 
 const useStyles = makeStyles({
   section: {
@@ -28,6 +29,7 @@ const useStyles = makeStyles({
 
 export function SettingsAbout(): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const [version, setVersion] = useState('')
   const [logPath, setLogPath] = useState('')
 
@@ -38,26 +40,24 @@ export function SettingsAbout(): JSX.Element {
 
   return (
     <div className={styles.section}>
-      <div className={styles.title}>关于</div>
+      <div className={styles.title}>{t('about.title')}</div>
 
       <div className={styles.line}>
-        <span className={styles.label}>版本：</span>
-        {version || '读取中'}
+        <span className={styles.label}>{t('about.version')}</span>
+        {version || t('about.reading')}
       </div>
 
       <div className={styles.line}>
-        <span className={styles.label}>日志文件：</span>
+        <span className={styles.label}>{t('about.logFile')}</span>
         <div className={styles.code}>{logPath}</div>
       </div>
 
       <div className={styles.line}>
-        <span className={styles.label}>数据位置：</span>
-        <div className={styles.code}>与日志文件同一目录（上两级）</div>
+        <span className={styles.label}>{t('about.dataLocation')}</span>
+        <div className={styles.code}>{t('about.dataLocationValue')}</div>
       </div>
 
-      <div className={styles.line}>
-        本程序不会读取你上传文件的内容，只记录路径和元信息。
-      </div>
+      <div className={styles.line}>{t('about.privacy')}</div>
     </div>
   )
 }

@@ -69,8 +69,8 @@ if (!app.requestSingleInstanceLock()) {
       log(`默认快捷键被占用，已改用 ${accelerator}`)
       win.webContents.once('did-finish-load', () => {
         win.webContents.send('app:shortcut-changed', {
-          from: shortcutLabel(settings.shortcut),
-          to: shortcutLabel(accelerator)
+          from: shortcutLabel(settings.shortcut, settings.uiLanguage),
+          to: shortcutLabel(accelerator, settings.uiLanguage)
         })
       })
     }

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react'
 import { Button, makeStyles, tokens, Tab, TabList } from '@fluentui/react-components'
+import { ArrowUndo20Regular, Dismiss20Regular, Translate20Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
 import { IntentEditor, type IntentEditorHandle } from './IntentEditor'
 import { MicButton } from './MicButton'
 import { useVoiceInput } from '../useVoiceInput'
 import { ClearButton } from './ClearButton'
+import { useT } from '../i18n'
 import { findRefs } from '../../shared/refs'
 import type { Draft } from '../../shared/types'
 
@@ -65,6 +67,38 @@ const useStyles = makeStyles({
     minHeight: 0,
     position: 'relative',
     display: 'flex'
+  },
+  /** 翻译按钮浮在编辑框左下角，右侧给麦克风留空间 */
+  translateSlot: {
+    position: 'absolute',
+    left: '10px',
+    bottom: '8px',
+    maxWidth: 'calc(100% - 64px)',
+    zIndex: 2
+  },
+  translateButton: {
+    maxWidth: '100%',
+    minWidth: 0,
+    whiteSpace: 'nowrap',
+    // 按钮浮在文字上方，必须是实心底色，否则下面的正文会透出来和标签叠在一起。
+    // 颜色与编辑框一致，看起来仍像浮在页面上，而不是多出一块补丁。
+    backgroundColor: tokens.colorNeutralBackground3,
+    '&:hover': {
+      backgroundColor: tokens.colorNeutralBackground3Hover
+    },
+    '&:active': {
+      backgroundColor: tokens.colorNeutralBackground3Pressed
+    },
+    '&:disabled': {
+      backgroundColor: tokens.colorNeutralBackground3
+    }
+  },
+  translateLabel: {
+    display: 'block',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
   },
   statusBar: {
     display: 'flex',
@@ -128,7 +162,7 @@ const useStyles = makeStyles({
   resultContent: {
     position: 'absolute',
     inset: 0,
-    padding: '10px 12px',
+    padding: '10px 12px 44px',
     fontSize: tokens.fontSizeBase300,
     lineHeight: '1.7',
     fontFamily: tokens.fontFamilyBase,
@@ -155,7 +189,7 @@ const useStyles = makeStyles({
     width: '100%',
     height: '100%',
     boxSizing: 'border-box',
-    padding: '10px 12px',
+    padding: '10px 12px 44px',
     margin: 0,
     border: 'none',
     outline: 'none',
@@ -203,6 +237,18 @@ interface EditorAreaProps {
    * 放在这里而不是底栏，避免可变长标题挤占操作按钮的宽度。
    */
   promptContext?: ReactNode
+  /** 是否有模型调用正在进行（含翻译自身） */
+  busy?: boolean
+  /** 翻译按钮与 5 秒撤销 */
+  translation?: {
+    targetLabel: string
+    runningPane: 'source' | 'result' | null
+    undoPane: 'source' | 'result' | null
+    undoSeconds: number
+    onTranslate: (pane: 'source' | 'result') => void
+    onUndo: () => void
+    onCancel: () => void
+  }
 }
 
 export function EditorArea({
@@ -216,9 +262,12 @@ export function EditorArea({
   onSwitchMode,
   onArchiveDraft,
   isDark = false,
-  promptContext
+  promptContext,
+  busy = false,
+  translation
 }: EditorAreaProps): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const { draft, activeTab, setActiveTab, setIntentText, setResultText } = useStore()
   const [focusSignal, setFocusSignal] = useState(0)
   const editorRef = useRef<IntentEditorHandle>(null)
@@ -247,11 +296,11 @@ export function EditorArea({
       ...draft.files.map((f) => ({ id: f.id, label: f.name, kind: 'file' as const })),
       ...draft.corpora.map((c) => ({
         id: c.id,
-        label: c.title.trim() || '未命名语料',
+        label: c.title.trim() || t('editor.untitledCorpus'),
         kind: 'corpus' as const
       }))
     ],
-    [draft.files, draft.corpora]
+    [draft.files, draft.corpora, t]
   )
 
   // 原文里引用了但已经不存在的编号，显示为失效引用
@@ -268,6 +317,57 @@ export function EditorArea({
   // 整理进行中时，把流式收到的内容实时显示出来
   const streaming = Boolean(streamText && streamText.length > 0)
 
+  /** 左下角的翻译 / 取消 / 撤销按钮 */
+  const renderTranslateButton = (
+    pane: 'source' | 'result',
+    extraDisabled = false
+  ): JSX.Element | null => {
+    if (!translation) return null
+
+    const runningHere = translation.runningPane === pane
+    const runningElsewhere =
+      translation.runningPane !== null && translation.runningPane !== pane
+    const undoHere = translation.undoPane === pane
+
+    if (undoHere) {
+      const label = t('editor.undoTranslate', { seconds: translation.undoSeconds })
+      return (
+        <Button
+          className={styles.translateButton}
+          size="small"
+          appearance="subtle"
+          icon={<ArrowUndo20Regular />}
+          title={label}
+          aria-label={label}
+          onClick={translation.onUndo}
+        >
+          <span className={styles.translateLabel}>{label}</span>
+        </Button>
+      )
+    }
+
+    const label = runningHere
+      ? t('editor.cancelTranslate')
+      : t('editor.translateTo', { language: translation.targetLabel })
+
+    return (
+      <Button
+        className={styles.translateButton}
+        size="small"
+        appearance="subtle"
+        icon={runningHere ? <Dismiss20Regular /> : <Translate20Regular />}
+        disabled={!runningHere && (busy || runningElsewhere || extraDisabled)}
+        title={label}
+        aria-label={label}
+        onClick={() =>
+          runningHere ? translation.onCancel() : translation.onTranslate(pane)
+        }
+      >
+        <span className={styles.translateLabel}>{label}</span>
+      </Button>
+    )
+  }
+
   return (
     <div className={styles.area}>
       <div className={styles.tabRow}>
@@ -276,9 +376,9 @@ export function EditorArea({
           onTabSelect={(_, data) => setActiveTab(data.value as 'source' | 'result')}
           size="small"
         >
-          <Tab value="source">原文</Tab>
+          <Tab value="source">{t('editor.source')}</Tab>
           <Tab value="result" disabled={!resultTabEnabled}>
-            优化结果
+            {t('editor.result')}
           </Tab>
         </TabList>
 
@@ -312,18 +412,24 @@ export function EditorArea({
               state={voice.state}
               elapsed={voice.elapsed}
               level={voice.level}
-              disabled={optimizing || streamText !== undefined && Boolean(streamText)}
+              disabled={optimizing || busy || (streamText !== undefined && Boolean(streamText))}
               onStart={() => void voice.start()}
               onCancel={voice.cancelTranscribe}
             />
+
+            {translation && (
+              <div className={styles.translateSlot}>
+                {renderTranslateButton('source', !draft.intentText.trim())}
+              </div>
+            )}
           </div>
         ) : (
           <div className={styles.resultWrap}>
             {stale && (
               <div className={styles.staleBar}>
-                <span>原文已修改，结果可能已过期。</span>
+                <span>{t('editor.stale')}</span>
                 <Button size="small" onClick={onReoptimize}>
-                  重新优化
+                  {t('editor.reoptimize')}
                 </Button>
               </div>
             )}
@@ -352,7 +458,7 @@ export function EditorArea({
             <div className={styles.statusBar}>
               {statusText && <span>{statusText}</span>}
               {draft.result?.editedByUser && (
-                <span className={styles.editedMark}>（你编辑过）</span>
+                <span className={styles.editedMark}>{t('editor.editedByUser')}</span>
               )}
               {onSwitchMode && hasResult && (
                 <Button
@@ -363,8 +469,8 @@ export function EditorArea({
                   }
                 >
                   {draft.optimization?.resolvedMode === 'simple'
-                    ? '切换为 Markdown 模式'
-                    : '切换为简单模式'}
+                    ? t('editor.switchToMarkdown')
+                    : t('editor.switchToSimple')}
                 </Button>
               )}
             </div>
@@ -372,7 +478,7 @@ export function EditorArea({
             {/* 流式和可编辑共用同一个容器，切换时不会跳动 */}
             <div className={styles.resultBox}>
               {optimizing && !hasResult ? (
-                <div className={styles.resultContent}>{streamText || '正在分析…'}</div>
+                <div className={styles.resultContent}>{streamText || t('editor.analyzing')}</div>
               ) : streaming ? (
                 <div className={styles.resultContent}>{streamText}</div>
               ) : (
@@ -380,9 +486,15 @@ export function EditorArea({
                   className={styles.resultEditable}
                   value={draft.result?.text ?? ''}
                   onChange={(event) => setResultText(event.target.value)}
-                  placeholder="优化结果会出现在这里，也可以直接编辑。"
+                  placeholder={t('editor.resultPlaceholder')}
                   spellCheck={false}
                 />
+              )}
+
+              {translation && hasResult && !optimizing && !streaming && (
+                <div className={styles.translateSlot}>
+                  {renderTranslateButton('result')}
+                </div>
               )}
             </div>
           </div>

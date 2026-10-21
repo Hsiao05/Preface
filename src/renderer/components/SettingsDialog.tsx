@@ -32,11 +32,12 @@ import { SettingsAbout } from './settings/AboutTab'
 import { HistoryPanel } from './settings/HistoryPanel'
 import { PromptsTab } from './settings/PromptsTab'
 import { SpeechTab } from './settings/SpeechTab'
+import { useT } from '../i18n'
 import type { ProfileView, ProfilesView } from '../../preload/index'
 
 const useStyles = makeStyles({
   surface: {
-    maxWidth: '820px',
+    maxWidth: '880px',
     width: '92vw',
     height: '78vh'
   },
@@ -142,6 +143,7 @@ interface SettingsNotice {
 
 export function SettingsDialog({ open, onClose }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const [tab, setTab] = useState<
     'general' | 'model' | 'speech' | 'prompts' | 'history' | 'about'
   >('general')
@@ -157,22 +159,22 @@ export function SettingsDialog({ open, onClose }: Props): JSX.Element {
       <DialogSurface className={styles.surface}>
         <DialogBody className={styles.body}>
           <div className={styles.titleRow}>
-            <DialogTitle>设置</DialogTitle>
+            <DialogTitle>{t('settings.title')}</DialogTitle>
             <Button
               appearance="subtle"
               icon={<Dismiss20Regular />}
-              aria-label="关闭设置"
+              aria-label={t('settings.close')}
               onClick={onClose}
             />
           </div>
 
           <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as typeof tab)}>
-            <Tab value="general">通用</Tab>
-            <Tab value="model">模型</Tab>
-            <Tab value="speech">语音</Tab>
-            <Tab value="prompts">提示词与风格</Tab>
-            <Tab value="history">找回之前的内容</Tab>
-            <Tab value="about">关于</Tab>
+            <Tab value="general">{t('settings.tab.general')}</Tab>
+            <Tab value="model">{t('settings.tab.model')}</Tab>
+            <Tab value="speech">{t('settings.tab.speech')}</Tab>
+            <Tab value="prompts">{t('settings.tab.prompts')}</Tab>
+            <Tab value="history">{t('settings.tab.history')}</Tab>
+            <Tab value="about">{t('settings.tab.about')}</Tab>
           </TabList>
 
           {notice && (
@@ -192,7 +194,7 @@ export function SettingsDialog({ open, onClose }: Props): JSX.Element {
                   <Button
                     appearance="transparent"
                     icon={<Dismiss16Regular />}
-                    aria-label="关闭提示"
+                    aria-label={t('settings.closeNotice')}
                     onClick={() => setNotice(null)}
                   />
                 }
@@ -221,6 +223,7 @@ function ModelTab({
   onNotice: (n: { text: string; kind: 'info' | 'warning' | 'success' } | null) => void
 }): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const [data, setData] = useState<ProfilesView | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<ProfileView | null>(null)
@@ -263,7 +266,7 @@ function ModelTab({
     const id = `p_${Date.now()}`
     const newProfile = {
       id,
-      name: '新配置',
+      name: t('settings.model.newProfile'),
       format: 'openai' as const,
       baseUrl: '',
       model: '',
@@ -290,7 +293,7 @@ function ModelTab({
     if (apiKeyInput.trim()) {
       const ok = await window.preface.setApiKey(draft.id, apiKeyInput.trim())
       if (!ok) {
-        onNotice({ kind: 'warning', text: 'API Key 保存失败，系统可能不支持加密存储。' })
+        onNotice({ kind: 'warning', text: t('settings.model.apiKeySaveFailed') })
         return
       }
       setApiKeyInput('')
@@ -310,7 +313,10 @@ function ModelTab({
     await window.preface.setCurrentProfile(draft.id)
     await reload(draft.id)
     notifyProfilesChanged()
-    onNotice({ kind: 'success', text: `已保存「${draft.name}」，并设为当前使用的配置。` })
+    onNotice({
+      kind: 'success',
+      text: t('settings.model.saved', { name: draft.name })
+    })
   }
 
   const fetchModels = async (): Promise<void> => {
@@ -343,13 +349,13 @@ function ModelTab({
       setModels(result.models)
       if (result.models.length === 0) {
         setManualModel(true)
-        onNotice({ kind: 'warning', text: '该服务没有返回任何模型，请手动输入模型名。' })
+        onNotice({ kind: 'warning', text: t('settings.model.noModelsReturned') })
       }
     } else {
       setManualModel(true)
       onNotice({
         kind: 'warning',
-        text: `${result.error.message}。该服务可能未提供模型列表，请手动输入模型名。`
+        text: t('settings.model.listFailed', { message: result.error.message })
       })
     }
   }
@@ -378,10 +384,14 @@ function ModelTab({
     setBusy(null)
 
     if (result.ok) {
-      const extra = result.sawReasoning
-        ? '（这个模型带推理过程，每次调用会更慢也更费 Token，建议换成非推理模型）'
-        : ''
-      onNotice({ kind: 'success', text: `连接成功，耗时 ${result.elapsedMs} 毫秒。${extra}` })
+      const extra = result.sawReasoning ? t('settings.model.testReasoningExtra') : ''
+      onNotice({
+        kind: 'success',
+        text: t('settings.model.testSucceeded', {
+          ms: result.elapsedMs,
+          extra
+        }).trim()
+      })
     } else {
       onNotice({
         kind: 'warning',
@@ -390,14 +400,12 @@ function ModelTab({
     }
   }
 
-  if (!data) return <Spinner label="正在读取配置" />
+  if (!data) return <Spinner label={t('settings.model.reading')} />
 
   return (
     <div className={styles.section}>
-      <div className={styles.sectionTitle}>模型配置</div>
-      <div className={styles.hint}>
-        可以保存多套配置，选一套作为当前使用的配置。API Key 会加密保存在本机，不会出现在界面里。
-      </div>
+      <div className={styles.sectionTitle}>{t('settings.model.title')}</div>
+      <div className={styles.hint}>{t('settings.model.intro')}</div>
 
       <div className={styles.profileList}>
         {data.profiles.map((p) => (
@@ -407,36 +415,40 @@ function ModelTab({
             onClick={() => selectProfile(p.id)}
           >
             <span className={styles.profileName}>{p.name}</span>
-            {p.id === data.currentId && <Text size={200}>当前使用</Text>}
+            {p.id === data.currentId && <Text size={200}>{t('settings.model.current')}</Text>}
             {p.hasKey && <Key20Regular />}
           </div>
         ))}
       </div>
 
       <Button icon={<Add20Regular />} onClick={() => void addProfile()}>
-        添加配置
+        {t('settings.model.add')}
       </Button>
 
       {draft && (
         <div className={styles.section}>
-          <Field label="名称">
+          <Field label={t('settings.model.name')}>
             <Input
               value={draft.name}
               onChange={(_, d) => setDraft({ ...draft, name: d.value })}
-              placeholder="例如：DeepSeek、Claude、本地模型"
+              placeholder={t('settings.model.namePlaceholder')}
             />
           </Field>
 
-          <Field label="接口格式">
+          <Field label={t('settings.model.format')}>
             <Dropdown
-              value={draft.format === 'openai' ? 'OpenAI 兼容' : 'Anthropic 兼容'}
+              value={
+                draft.format === 'openai'
+                  ? t('settings.model.openai')
+                  : t('settings.model.anthropic')
+              }
               selectedOptions={[draft.format]}
               onOptionSelect={(_, d) =>
                 setDraft({ ...draft, format: d.optionValue as 'openai' | 'anthropic' })
               }
             >
-              <Option value="openai">OpenAI 兼容</Option>
-              <Option value="anthropic">Anthropic 兼容</Option>
+              <Option value="openai">{t('settings.model.openai')}</Option>
+              <Option value="anthropic">{t('settings.model.anthropic')}</Option>
             </Dropdown>
           </Field>
 
@@ -454,43 +466,45 @@ function ModelTab({
             label="API Key"
             hint={
               draft.hasKey
-                ? '已设置。要换一个，就在下面填新的。'
-                : '还没有设置。填入后会加密保存。'
+                ? t('settings.model.apiKeySet')
+                : t('settings.model.apiKeyUnset')
             }
           >
             <Input
               type="password"
               value={apiKeyInput}
               onChange={(_, d) => setApiKeyInput(d.value)}
-              placeholder={draft.hasKey ? '已设置（留空则不改）' : '粘贴你的 API Key'}
+              placeholder={
+                draft.hasKey
+                  ? t('settings.model.apiKeyPlaceholderSet')
+                  : t('settings.model.apiKeyPlaceholderUnset')
+              }
             />
           </Field>
 
-          <Field label="模型">
+          <Field label={t('settings.model.model')}>
             <div className={styles.row}>
               <Input
                 className={styles.grow}
                 value={draft.model}
                 onChange={(_, d) => setDraft({ ...draft, model: d.value })}
-                placeholder="例如：deepseek-chat"
+                placeholder={t('settings.model.modelPlaceholder')}
               />
             </div>
           </Field>
 
           <div className={styles.hint}>
-            推荐使用非推理（非思考）模型。提示词优化不需要长时间推理，推理模型会额外消耗大量看不见的
-            Token，速度也更慢。
+            {t('settings.model.reasoningHint1')}
             <br />
-            如果你用的是 DeepSeek，模型名建议填 <code>deepseek-chat</code>；
-            <code>deepseek-reasoner</code> 是推理模型，容易把输出预算用在思考上，导致看不到正文。
+            {t('settings.model.reasoningHint2')}
           </div>
 
           <div className={styles.buttonRow}>
             <Button onClick={() => void fetchModels()} disabled={busy !== null}>
-              {busy === 'models' ? <Spinner size="tiny" /> : null} 获取模型列表
+              {busy === 'models' ? <Spinner size="tiny" /> : null} {t('settings.model.fetchModels')}
             </Button>
             <Button onClick={() => void test()} disabled={busy !== null}>
-              {busy === 'test' ? <Spinner size="tiny" /> : null} 测试连接
+              {busy === 'test' ? <Spinner size="tiny" /> : null} {t('settings.model.test')}
             </Button>
           </div>
 
@@ -503,32 +517,32 @@ function ModelTab({
                   onClick={() => setDraft({ ...draft, model: m.id })}
                 >
                   {m.id}
-                  {m.displayName ? `（${m.displayName}）` : ''}
+                  {m.displayName ? ` (${m.displayName})` : ''}
                 </div>
               ))}
             </div>
           )}
 
           {manualModel && (
-            <div className={styles.hint}>该服务未提供模型列表，请在上面的「模型」框里手动输入模型名。</div>
+            <div className={styles.hint}>{t('settings.model.manualModel')}</div>
           )}
 
           <div className={styles.row}>
-            <Field label="温度" className={styles.grow}>
+            <Field label={t('settings.model.temperature')} className={styles.grow}>
               <Input
                 type="number"
                 value={String(draft.temperature)}
                 onChange={(_, d) => setDraft({ ...draft, temperature: Number(d.value) || 0 })}
               />
             </Field>
-            <Field label="最大输出长度" className={styles.grow}>
+            <Field label={t('settings.model.maxTokens')} className={styles.grow}>
               <Input
                 type="number"
                 value={String(draft.maxTokens)}
                 onChange={(_, d) => setDraft({ ...draft, maxTokens: Number(d.value) || 4096 })}
               />
             </Field>
-            <Field label="超时（秒）" className={styles.grow}>
+            <Field label={t('settings.model.timeout')} className={styles.grow}>
               <Input
                 type="number"
                 value={String(Math.round(draft.timeoutMs / 1000))}
@@ -541,14 +555,14 @@ function ModelTab({
 
           <div className={styles.buttonRow}>
             <Button appearance="primary" onClick={() => void save()}>
-              保存
+              {t('common.save')}
             </Button>
             <Button
               icon={<Delete20Regular />}
               appearance="secondary"
               onClick={() => void deleteProfile()}
             >
-              删除这套配置
+              {t('settings.model.delete')}
             </Button>
           </div>
         </div>

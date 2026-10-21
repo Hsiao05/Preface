@@ -4,6 +4,7 @@ import { useLlmRun } from './useLlmRun'
 import { buildTitleMessages } from '../shared/buildMessages'
 import { buildPromptTitleMessages } from '../shared/promptLibrary'
 import { toOverrides } from './usePromptOverrides'
+import { useT } from './i18n'
 
 /**
  * 给语料生成标题（文档第七节的模板 E）。
@@ -48,6 +49,7 @@ export function useTitle(): {
   cancel: () => void
 } {
   const [generating, setGenerating] = useState(false)
+  const t = useT()
   const { run, cancel: cancelRun } = useLlmRun()
   // 每次生成 +1，旧请求的 finally 不能把新请求的 loading 清掉
   const generationRef = useRef(0)
@@ -102,10 +104,10 @@ export function useTitle(): {
         'title',
         buildTitleMessages(content, overrides),
         cleanTitle,
-        '模型没有返回标题，请手动填写。'
+        t('title.empty')
       )
     },
-    [start]
+    [start, t]
   )
 
   const generateForPrompt = useCallback(
@@ -116,10 +118,10 @@ export function useTitle(): {
         'title',
         buildPromptTitleMessages(content),
         (raw) => cleanPromptTitle(raw),
-        '模型没有返回标题，请手动填写。'
+        t('title.empty')
       )
     },
-    [start]
+    [start, t]
   )
 
   const cancel = useCallback((): void => {

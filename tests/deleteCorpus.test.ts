@@ -31,7 +31,7 @@ describe('删除语料不会顺带打开编辑窗口', () => {
 
   it('阻止冒泡发生在删除之前', () => {
     const i = bar.indexOf('event.stopPropagation()')
-    const j = bar.indexOf("requestDelete(corpus.id", i)
+    const j = bar.search(/requestDelete\(\s*corpus\.id/)
     expect(i).toBeGreaterThan(-1)
     expect(j).toBeGreaterThan(i)
   })
@@ -60,10 +60,10 @@ describe('两个标签的删除按钮行为一致', () => {
     // 文件和语料各一个调用点（定义那行是 `requestDelete = (`，不匹配）
     expect(calls.length).toBe(2)
     expect(bar).toContain("requestDelete(file.id, file.name, 'file')")
-    expect(bar).toContain("requestDelete(corpus.id")
+    expect(bar).toMatch(/requestDelete\(\s*corpus\.id/)
   })
 
   it('被引用时弹确认框，说明引用了几次', () => {
-    expect(bar).toContain('在原文里被引用了')
+    expect(bar).toContain("t('resource.deleteBody'")
   })
 })

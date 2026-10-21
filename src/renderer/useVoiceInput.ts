@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Recorder } from './recorder'
 import { useStore } from './store'
-import { cleanTranscript, EMPTY_RESULT_MESSAGE, MIN_RECORD_SECONDS } from '../shared/speech'
+import { useT } from './i18n'
+import { cleanTranscript, MIN_RECORD_SECONDS } from '../shared/speech'
 
 /**
  * 语音输入。
@@ -36,6 +37,7 @@ export interface VoiceInputApi {
 export type InsertText = (text: string) => void
 
 export function useVoiceInput(insertText: InsertText): VoiceInputApi {
+  const t = useT()
   const [state, setState] = useState<VoiceState>('idle')
   const [elapsed, setElapsed] = useState(0)
   const [level, setLevel] = useState(0)
@@ -85,7 +87,7 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
         setState('idle')
         setElapsed(0)
         setLevel(0)
-        setNotice({ kind: 'warning', text: '录音太短了，请按住久一点。' })
+        setNotice({ kind: 'warning', text: t('voice.tooShort') })
         return
       }
 
@@ -100,7 +102,9 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
         setState('idle')
         setNotice({
           kind: 'warning',
-          text: `停止录音失败：${error instanceof Error ? error.message : String(error)}`
+          text: t('voice.stopFailed', {
+            message: error instanceof Error ? error.message : String(error)
+          })
         })
         return
       }
@@ -108,7 +112,7 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
 
       if (wav.length === 0) {
         setState('idle')
-        setNotice({ kind: 'warning', text: '没有录到声音。' })
+        setNotice({ kind: 'warning', text: t('voice.noSound') })
         return
       }
 
@@ -124,7 +128,10 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
         setNotice({
           kind: 'warning',
           text: result.error.suggestion
-            ? `${result.error.message}。${result.error.suggestion}`
+            ? t('speech.errorWithSuggestion', {
+                message: result.error.message,
+                suggestion: result.error.suggestion
+              })
             : result.error.message
         })
         return
@@ -132,13 +139,13 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
 
       const text = cleanTranscript(result.text)
       if (!text) {
-        setNotice({ kind: 'warning', text: EMPTY_RESULT_MESSAGE })
+        setNotice({ kind: 'warning', text: t('audio.emptyResult') })
         return
       }
 
       insertText(text)
     },
-    [clearTimer, insertText, setNotice]
+    [clearTimer, insertText, setNotice, t]
   )
 
   /** 开始录音 */
@@ -150,7 +157,7 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
     if (!info.configured) {
       setNotice({
         kind: 'warning',
-        text: '还没有配置语音识别。请到「设置 → 语音」里选择服务商并填入 API Key。'
+        text: t('audio.notConfigured')
       })
       return
     }
@@ -172,7 +179,7 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
       setState('idle')
       setNotice({
         kind: 'warning',
-        text: error instanceof Error ? error.message : '无法开始录音'
+        text: error instanceof Error ? error.message : t('settings.speech.cannotStart')
       })
       return
     }
@@ -190,19 +197,21 @@ export function useVoiceInput(insertText: InsertText): VoiceInputApi {
       if (seconds >= maxSecondsRef.current) {
         setNotice({
           kind: 'info',
-          text: `已录满 ${Math.round(maxSecondsRef.current / 60)} 分钟，自动停止。`
+          text: t('voice.maxReached', {
+            minutes: Math.round(maxSecondsRef.current / 60)
+          })
         })
         void stopAndTranscribe(false)
       }
     }, 200)
-  }, [setNotice, state, stopAndTranscribe])
+  }, [setNotice, state, stopAndTranscribe, t])
 
   /** 取消识别 */
   const cancelTranscribe = useCallback((): void => {
     void window.preface.cancelTranscribe()
     setState('idle')
-    setNotice({ kind: 'info', text: '已取消识别。' })
-  }, [setNotice])
+    setNotice({ kind: 'info', text: t('voice.cancelled') })
+  }, [setNotice, t])
 
   // ---------- 录音期间的"任意键/任意点击停止" ----------
   useEffect(() => {

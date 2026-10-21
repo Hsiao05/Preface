@@ -31,7 +31,7 @@ describe('结果可以编辑', () => {
 
   it('界面上提示"你编辑过"', () => {
     const source = read('src/renderer/components/EditorArea.tsx')
-    expect(source).toContain('你编辑过')
+    expect(source).toContain("t('editor.editedByUser')")
   })
 })
 
@@ -57,7 +57,7 @@ describe('编辑过的结果被覆盖前要确认', () => {
 
   it('App 里有确认对话框', () => {
     const source = read('src/renderer/App.tsx')
-    expect(source).toContain('将覆盖你的修改')
+    expect(source).toContain("t('dialog.overwrite.title')")
     expect(source).toContain('pendingConfirm')
   })
 })
@@ -133,7 +133,7 @@ describe('原文改动后结果标记为过期', () => {
 describe('深浅色模式用下拉框', () => {
   it('设置里用的是 Dropdown 而不是滑块', () => {
     const source = read('src/renderer/components/settings/GeneralTab.tsx')
-    expect(source).toContain('深浅色模式')
+    expect(source).toContain("t('settings.general.theme')")
     expect(source).toContain('Dropdown')
     // 不该再有 ToggleButton 做的三段开关
     expect(source).not.toContain('ToggleButton')
@@ -141,9 +141,9 @@ describe('深浅色模式用下拉框', () => {
 
   it('三个选项都在', () => {
     const source = read('src/renderer/components/settings/GeneralTab.tsx')
-    expect(source).toContain('跟随设备')
-    expect(source).toContain('浅色')
-    expect(source).toContain('深色')
+    expect(source).toContain("t('settings.general.themeSystem')")
+    expect(source).toContain("t('settings.general.themeLight')")
+    expect(source).toContain("t('settings.general.themeDark')")
   })
 })
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { toOverrides } from '../src/renderer/usePromptOverrides'
 import { buildSystemPrompt, buildTidySystemPrompt } from '../src/shared/buildMessages'
 import { BUILTIN_BLOCKS } from '../src/shared/prompts/blocks'
+import { BUILTIN_TEMPLATES } from '../src/shared/prompts/templates'
 import { estimateTokens } from '../src/shared/estimateTokens'
 import type { StyleItemView } from '../src/preload/index'
 
@@ -232,5 +233,32 @@ describe('内置版本升级的规则', () => {
     expect(items[1].text).toContain('/命令')
     expect(items[2].text).toContain('/命令')
     expect(items[3].text).toContain('/命令')
+  })
+
+  it('优化表达升级到 v2：没改过的用户拿到词句润色版', async () => {
+    const { items } = await upgrade([
+      item({ id: 'expression', kind: 'template', builtinVersion: 1 })
+    ])
+
+    expect(items[0].text).toBe(BUILTIN_TEMPLATES.expression)
+    expect(items[0].text).toContain('只改词句，不改结构')
+    expect(items[0].builtinVersion).toBe(2)
+  })
+
+  it('改过优化表达的用户保留自己的文本和旧版本号', async () => {
+    const { items, changed, hasBuiltinUpdate } = await upgrade([
+      item({
+        id: 'expression',
+        kind: 'template',
+        builtinVersion: 1,
+        edited: true,
+        text: '我自己写的表达模板'
+      })
+    ])
+
+    expect(items[0].text).toBe('我自己写的表达模板')
+    expect(items[0].builtinVersion).toBe(1)
+    expect(changed).toBe(false)
+    expect(hasBuiltinUpdate(items[0])).toBe(true)
   })
 })

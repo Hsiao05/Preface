@@ -2,10 +2,13 @@ import { create } from 'zustand'
 import type { CorpusResource, Draft, FileResource, Mode, ReplyFormat, Target } from '../shared/types'
 import { createDraft, draftId } from '../shared/types'
 import type { PromptSelection } from '../shared/promptLibrary'
+import type { UiLanguage } from '../shared/i18n'
 import { appendWithSpacing } from '../shared/appendText'
 
 interface AppState {
   draft: Draft
+  /** 界面语言。启动时由 localStorage 镜像先填入，随后用设置校正。 */
+  uiLanguage: UiLanguage
   /** 当前显示的标签页 */
   activeTab: 'source' | 'result'
   /** 顶栏风格下拉框 */
@@ -34,6 +37,7 @@ interface AppState {
   activePrompt: PromptSelection | null
 
   // ---------- 动作 ----------
+  setUiLanguage: (language: UiLanguage) => void
   setIntentText: (text: string) => void
   setTarget: (target: Target) => void
   setMode: (mode: Mode) => void
@@ -73,6 +77,10 @@ interface AppState {
   replaceDraft: (draft: Draft) => void
   /** 编辑优化结果 */
   setResultText: (text: string) => void
+  /** 精确替换结果对象（翻译用，保留 editedByUser/stale 的原始语义） */
+  setResult: (result: Draft['result']) => void
+  /** 撤销原文改写，并把结果的过期标记恢复到改写前 */
+  restoreIntentText: (text: string, resultStale: boolean) => void
   /** 把结果标记为已过期（原文改过之后） */
   markResultStale: () => void
   resetDraft: () => void
@@ -87,8 +95,19 @@ function touch(draft: Draft, patch: Partial<Draft>): Draft {
   return { ...draft, ...patch, updatedAt: Date.now() }
 }
 
+/** 读取界面语言的本地镜像，避免设置加载前先闪一帧中文 */
+export function initialUiLanguage(): UiLanguage {
+  try {
+    const value = window.localStorage.getItem('preface.uiLanguage')
+    return value === 'en' ? 'en' : 'zh'
+  } catch {
+    return 'zh'
+  }
+}
+
 export const useStore = create<AppState>((set) => ({
   draft: createDraft(draftId()),
+  uiLanguage: initialUiLanguage(),
   activeTab: 'source',
   styleId: 'clear-direct',
   notice: null,
@@ -98,6 +117,15 @@ export const useStore = create<AppState>((set) => ({
   caret: 0,
   activePrompt: null,
   draftEpoch: 0,
+
+  setUiLanguage: (uiLanguage) => {
+    try {
+      window.localStorage.setItem('preface.uiLanguage', uiLanguage)
+    } catch {
+      // 隐私模式或存储被禁时只影响下次启动的首帧，不影响本次切换
+    }
+    set({ uiLanguage })
+  },
 
   setIntentText: (intentText) =>
     set((state) => {
@@ -217,6 +245,21 @@ export const useStore = create<AppState>((set) => ({
           result: { ...state.draft.result, text, editedByUser: true }
         })
       }
+    }),
+
+  /** 精确写回整个结果对象，不额外修改 editedByUser */
+  setResult: (result) =>
+    set((state) => ({
+      draft: touch(state.draft, { result })
+    })),
+
+  /** 撤销改写：写入原文，并把结果的过期标记恢复到操作前 */
+  restoreIntentText: (text, resultStale) =>
+    set((state) => {
+      const result = state.draft.result
+        ? { ...state.draft.result, stale: resultStale }
+        : null
+      return { draft: touch(state.draft, { intentText: text, result }) }
     }),
 
   /** 原文改动后，把结果标记为可能过期 */

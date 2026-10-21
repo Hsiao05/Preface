@@ -128,9 +128,9 @@ describe('设置界面有主题开关', () => {
   const source = read('src/renderer/components/settings/GeneralTab.tsx')
 
   it('三个选项都在', () => {
-    expect(source).toContain('跟随设备')
-    expect(source).toContain('浅色')
-    expect(source).toContain('深色')
+    expect(source).toContain("t('settings.general.themeSystem')")
+    expect(source).toContain("t('settings.general.themeLight')")
+    expect(source).toContain("t('settings.general.themeDark')")
   })
 
   it('用下拉框（用户反馈滑块用起来奇怪）', () => {

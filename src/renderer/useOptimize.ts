@@ -15,6 +15,7 @@ import { buildCommandWarning } from '../shared/commands'
 import { toOverrides } from './usePromptOverrides'
 import { cleanResultText } from '../shared/cleanResult'
 import { formatTokenCount } from '../shared/estimateTokens'
+import { useT } from './i18n'
 import type { ResolvedMode } from '../shared/types'
 import type { PromptSelection } from '../shared/promptLibrary'
 
@@ -113,6 +114,8 @@ export function useOptimize(): {
   cancel: () => void
   reset: () => void
 } {
+  const t = useT()
+  const language = useStore((s) => s.uiLanguage)
   const [state, setState] = useState<OptimizeState>(INITIAL)
   const [streamText, setStreamText] = useState('')
   const [pendingConfirm, setPendingConfirm] = useState<(() => void) | null>(null)
@@ -264,7 +267,7 @@ export function useOptimize(): {
       const remedy = await callModel('followup', messages, sourceText, { showStream: false })
       if (remedy === null) {
         // 补救失败，保留原结果并提示
-        return { text, warning: '引用可能有误，请检查。' }
+        return { text, warning: t('optimize.refWarning') }
       }
 
       const reparsed = parseReply(remedy.text)
@@ -288,9 +291,9 @@ export function useOptimize(): {
       if (recheck.ok) {
         return { text: cleaned, warning: null }
       }
-      return { text: cleaned, warning: '引用可能有误，请检查。' }
+      return { text: cleaned, warning: t('optimize.refWarning') }
     },
-    [callModel]
+    [callModel, t]
   )
 
   /** 处理模型输出（首轮和续写共用） */
@@ -345,7 +348,7 @@ export function useOptimize(): {
           phase: 'idle',
           refWarning: warning,
           // 只比对、只提示，不额外调用模型
-          commandWarning: buildCommandWarning(sourceText, text),
+          commandWarning: buildCommandWarning(sourceText, text, language),
           questions: []
         }))
         setStreamText('')
@@ -429,10 +432,10 @@ export function useOptimize(): {
     if (editedPrompt) {
       store.setNotice({
         kind: 'warning',
-        text: '模型连续两次没有按格式输出。你改过提示词，建议检查一下修改，或在「设置 → 提示词与风格」里恢复默认。'
+        text: t('optimize.fallbackWarning')
       })
     }
-  }, [])
+  }, [t])
 
   /** 成功拿到结果时，把兜底计数清零 */
   const clearFallback = useCallback((): void => {
@@ -610,7 +613,7 @@ export function useOptimize(): {
         ...prev,
         phase: 'idle',
         resolvedMode: target,
-        commandWarning: buildCommandWarning(sourceText, cleaned)
+        commandWarning: buildCommandWarning(sourceText, cleaned, language)
       }))
       setStreamText('')
     },

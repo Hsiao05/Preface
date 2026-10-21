@@ -1,9 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useStore } from './store'
-import { buildTidyMessages } from '../shared/buildMessages'
-import { toOverrides } from './usePromptOverrides'
-import { stripMarkdown } from '../shared/stripMarkdown'
-import { missingCommands } from '../shared/commands'
+import { translate } from '../shared/i18n'
+import type { MessageKey, UiLanguage } from '../shared/i18n'
 import type { CallKind } from '../main/llm'
 import type { LlmStreamEvent } from '../preload/index'
 import type { UsageInfo } from '../shared/sse'
@@ -21,32 +19,34 @@ export interface DoneInfo {
  * 用户要求：推理模型导致输出不完整时，要明确告诉用户两条出路
  * —— 换非推理模型，或者调大最大输出长度。
  */
-export function buildTruncatedMessage(info: DoneInfo): string {
-  const parts: string[] = ['整理完成了，但输出被截断，结果可能不完整。']
+export function buildTruncatedMessage(info: DoneInfo, language: UiLanguage = 'zh'): string {
+  const t = (key: MessageKey, params?: Record<string, string | number>): string =>
+    translate(language, key, params)
+  const parts: string[] = [t('truncated.tidy')]
 
   if (info.sawReasoning) {
     const used =
-      info.reasoningTokens > 0 ? `（其中约 ${info.reasoningTokens} tokens 用在了思考上）` : ''
-    parts.push(
-      `这个模型带推理过程，思考占用了大部分输出预算${used}。` +
-        '建议在设置里换一个非推理模型（例如 deepseek-chat），它更快、更省，也不会截断。'
-    )
+      info.reasoningTokens > 0
+        ? t('truncated.reasoningTokens', {
+            count: info.reasoningTokens.toLocaleString(
+              language === 'en' ? 'en-US' : 'zh-CN'
+            )
+          })
+        : ''
+    parts.push(t('truncated.reasoning', { tokens: used }))
   } else {
-    parts.push('建议在设置里把「最大输出长度」调大一些，再重新整理一次。')
+    parts.push(t('truncated.increaseMaxTokens'))
   }
 
   return parts.join('')
 }
 
 /** 结果为空时的提示 */
-export function buildEmptyResultMessage(info: DoneInfo): string {
+export function buildEmptyResultMessage(info: DoneInfo, language: UiLanguage = 'zh'): string {
   if (info.sawReasoning) {
-    return (
-      '这是个推理模型，本次输出被思考过程占满了，没有正文。原文保持不变。' +
-      '建议在设置里换一个非推理模型（例如 deepseek-chat），或者在设置里把「最大输出长度」调大。'
-    )
+    return translate(language, 'empty.reasoning')
   }
-  return '整理没有返回内容，原文保持不变。请再试一次。'
+  return translate(language, 'empty.tidy')
 }
 
 /** 一次进行中的调用 */
@@ -117,6 +117,8 @@ export function useLlmRun(): {
     ): Promise<string | null> => {
       const setNotice = useStore.getState().setNotice
       const trackStream = options.trackStream ?? true
+      const t = (key: MessageKey, params?: Record<string, string | number>): string =>
+        translate(useStore.getState().uiLanguage, key, params)
 
       let accumulated = ''
       let finalText: string | null = null
@@ -159,14 +161,14 @@ export function useLlmRun(): {
             // 只在第一次提示
             setNotice({
               kind: 'info',
-              text: '当前模型带有推理过程，消耗会明显增加。'
+              text: t('notice.reasoning')
             })
             break
 
           case 'privacy-notice':
             setNotice({
               kind: 'info',
-              text: '你的意图文本、资料清单和语料标题会发送给该服务商。'
+              text: t('notice.privacy')
             })
             break
 
@@ -181,7 +183,7 @@ export function useLlmRun(): {
             const error = event.error
             const text = error
               ? `${error.message}${error.suggestion ? ' ' + error.suggestion : ''}`
-              : '请求失败'
+              : t('notice.requestFailed')
             options.onError?.(text)
             setNotice({ kind: 'warning', text })
             break
@@ -221,7 +223,7 @@ export function useLlmRun(): {
         requestIdRef.current = null
         setState({ running: null, streamText: '', usage: null })
         const text = error instanceof Error ? error.message : String(error)
-        setNotice({ kind: 'warning', text: `调用失败：${text}` })
+        setNotice({ kind: 'warning', text: t('notice.callFailed', { message: text }) })
         options.onError?.(text)
         return null
       }
@@ -246,136 +248,13 @@ export function useLlmRun(): {
     }
     // 立刻清掉流式预览，界面马上回到可编辑状态
     setState({ running: null, streamText: '', usage: null })
-    if (!silent) useStore.getState().setNotice({ kind: 'info', text: '已取消。' })
+    if (!silent) {
+      useStore.getState().setNotice({
+        kind: 'info',
+        text: translate(useStore.getState().uiLanguage, 'notice.cancelled')
+      })
+    }
   }, [])
 
   return { state, run, cancel }
-}
-
-/** 整理结果丢了命令时，等用户决定要不要覆盖 */
-export interface PendingCommandReplace {
-  original: string
-  cleaned: string
-  missing: string[]
-}
-
-/** 整理碎碎念：把结果替换原文，并记下原文以便撤销 */
-export function useTidy(): {
-  tidy: () => Promise<void>
-  undo: () => void
-  canUndo: boolean
-  running: boolean
-  streamText: string
-  cancel: () => void
-  /** 整理结果缺少 /命令，等用户确认 */
-  pendingCommand: PendingCommandReplace | null
-  /** 仍然替换原文 */
-  confirmReplace: () => void
-  /** 保留原文 */
-  cancelReplace: () => void
-} {
-  const { state, run, cancel } = useLlmRun()
-  const [undoText, setUndoText] = useState<string | null>(null)
-  const [pendingCommand, setPendingCommand] = useState<PendingCommandReplace | null>(null)
-
-  const tidy = useCallback(async (): Promise<void> => {
-    const store = useStore.getState()
-    const original = store.draft.intentText
-    if (!original.trim()) return
-
-    const settings = await window.preface.getSettings()
-    const stylesData = await window.preface.listStyles()
-    const overrides = toOverrides(stylesData.items)
-
-    const messages = buildTidyMessages(original, {
-      styleId: store.draft.styleId,
-      includeStyleSamples: settings.tidyUseStyleSamples,
-      overrides
-    })
-
-    await run('tidy', messages, {
-      sourceText: original,
-      onDone: (text, info) => {
-        // 简单模式兜底：去掉可能残留的 Markdown 符号
-        const cleaned = stripMarkdown(text).trim()
-
-        // 【重要】结果是空的就绝不覆盖原文。
-        // 否则一旦上游出问题（例如事件没收到），用户的原文就被清空了。
-        if (!cleaned) {
-          store.setNotice({
-            kind: 'warning',
-            text: buildEmptyResultMessage(info)
-          })
-          return
-        }
-
-        /*
-         * 整理会直接覆盖原文。如果结果丢了 /命令，覆盖后再提示就晚了
-         * —— 所以先停下来问一句。仍然不额外调用模型。
-         */
-        const missing = missingCommands(original, cleaned)
-        if (missing.length > 0) {
-          setPendingCommand({ original, cleaned, missing })
-          return
-        }
-
-        setUndoText(original)
-        store.setIntentText(cleaned)
-
-        // 输出被截断时，结果虽然能用，但要提醒用户它不完整
-        if (info.truncated) {
-          store.setNotice({
-            kind: 'warning',
-            text: buildTruncatedMessage(info)
-          })
-          return
-        }
-
-        store.setNotice({
-          kind: 'success',
-          text: '已整理。可以点「撤销整理」恢复原文。'
-        })
-      }
-    })
-    // 失败或取消时什么都不做，原文保持不变
-  }, [run])
-
-  const undo = useCallback((): void => {
-    if (undoText === null) return
-    const store = useStore.getState()
-    store.setIntentText(undoText)
-    setUndoText(null)
-    store.setNotice({ kind: 'info', text: '已撤销整理。' })
-  }, [undoText])
-
-  /** 用户确认：即使少了命令也替换 */
-  const confirmReplace = useCallback((): void => {
-    if (!pendingCommand) return
-    const store = useStore.getState()
-    setUndoText(pendingCommand.original)
-    store.setIntentText(pendingCommand.cleaned)
-    store.setNotice({
-      kind: 'warning',
-      text: `已替换原文，但 ${pendingCommand.missing.join('、')} 没有保留，可以点「撤销整理」恢复原文。`
-    })
-    setPendingCommand(null)
-  }, [pendingCommand])
-
-  /** 用户放弃：保留原文 */
-  const cancelReplace = useCallback((): void => {
-    setPendingCommand(null)
-    useStore.getState().setNotice({ kind: 'info', text: '已保留原文。' })
-  }, [])
-
-  return {
-    tidy,
-    undo,
-    canUndo: undoText !== null,
-    running: state.running !== null,
-    streamText: state.streamText,
-    cancel,
-    pendingCommand,
-    confirmReplace,
-    cancelReplace
-  }
 }

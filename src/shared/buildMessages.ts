@@ -1,6 +1,7 @@
 import { BUILTIN_BLOCKS, type BlockId } from './prompts/blocks'
 import { BUILTIN_TEMPLATES } from './prompts/templates'
 import { findBuiltinStyle } from './prompts/styles'
+import { translationPromptName } from './translationLanguages'
 import {
   buildPromptSystemSection,
   buildPromptUserSection,
@@ -20,7 +21,7 @@ import type { CorpusResource, FileResource, ReplyFormat } from './types'
 
 export interface PromptOverrides {
   blocks?: Partial<Record<BlockId, string>>
-  templates?: Partial<Record<'tidy' | 'title', string>>
+  templates?: Partial<Record<'tidy' | 'title' | 'translate' | 'expression', string>>
   styles?: Record<string, string>
   styleSamples?: Record<string, string[]>
   extra?: string
@@ -125,6 +126,34 @@ export function buildTitleSystemPrompt(overrides?: PromptOverrides): string {
   return overrides?.templates?.title ?? BUILTIN_TEMPLATES.title
 }
 
+/**
+ * 翻译的系统提示词。
+ *
+ * 目标语言会替换模板里所有的 {{target_language}}。用户把占位符删掉时，
+ * 仍在末尾补一行，保证目标语言一定进入提示词。
+ */
+export function buildTranslateSystemPrompt(input: {
+  overrides?: PromptOverrides
+  target: string
+}): string {
+  const template = input.overrides?.templates?.translate ?? BUILTIN_TEMPLATES.translate
+  const language = translationPromptName(input.target) || 'English'
+  if (template.includes('{{target_language}}')) {
+    return template.split('{{target_language}}').join(language)
+  }
+  return `${template}\n\nTarget language: ${language}`
+}
+
+/** 优化表达的系统提示词。附加要求生效，但不追加风格样本。 */
+export function buildExpressionSystemPrompt(
+  input: { overrides?: PromptOverrides } = {}
+): string {
+  let prompt = input.overrides?.templates?.expression ?? BUILTIN_TEMPLATES.expression
+  const extra = input.overrides?.extra?.trim()
+  if (extra) prompt += `\n\n用户的附加要求：${extra}`
+  return prompt
+}
+
 /** 整理碎碎念的消息：user 消息就是原文本身，不附带资料清单 */
 export function buildTidyMessages(
   sourceText: string,
@@ -144,6 +173,28 @@ export function buildTitleMessages(
   return [
     { role: 'system', content: buildTitleSystemPrompt(overrides) },
     { role: 'user', content: content.slice(0, 500) }
+  ]
+}
+
+/** 翻译的消息：user 消息是待翻译的文本本身 */
+export function buildTranslateMessages(
+  sourceText: string,
+  options: { overrides?: PromptOverrides; target: string }
+): Array<{ role: 'system' | 'user'; content: string }> {
+  return [
+    { role: 'system', content: buildTranslateSystemPrompt(options) },
+    { role: 'user', content: sourceText }
+  ]
+}
+
+/** 优化表达的消息：user 消息是原文本身 */
+export function buildExpressionMessages(
+  sourceText: string,
+  options: { overrides?: PromptOverrides } = {}
+): Array<{ role: 'system' | 'user'; content: string }> {
+  return [
+    { role: 'system', content: buildExpressionSystemPrompt(options) },
+    { role: 'user', content: sourceText }
   ]
 }
 

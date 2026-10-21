@@ -11,6 +11,7 @@ import {
 import { Edit16Regular } from '@fluentui/react-icons'
 import type { ParsedQuestion } from '../../shared/parseReply'
 import type { ClarifyAnswer } from '../../shared/conversation'
+import { useT } from '../i18n'
 
 /**
  * 澄清面板（文档第三节）。
@@ -163,6 +164,7 @@ const CUSTOM_VALUE = '__custom__'
 
 export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const [states, setStates] = useState<Record<number, QuestionState>>({})
   const [correctionOpen, setCorrectionOpen] = useState(false)
   const [correction, setCorrection] = useState('')
@@ -217,15 +219,15 @@ export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): 
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.intentRow}>
-          <span className={styles.intentLabel}>我理解你想要：</span>
-          <span className={styles.intentText}>{intent || '（模型没有复述意图）'}</span>
+          <span className={styles.intentLabel}>{t('clarify.intentLabel')}</span>
+          <span className={styles.intentText}>{intent || t('clarify.noIntent')}</span>
           <Button
             size="small"
             appearance="subtle"
             icon={<Edit16Regular />}
             onClick={() => setCorrectionOpen((v) => !v)}
           >
-            不对，我来更正
+            {t('clarify.correct')}
           </Button>
         </div>
 
@@ -234,7 +236,7 @@ export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): 
             className={styles.correctionBox}
             value={correction}
             onChange={(_, d) => setCorrection(d.value)}
-            placeholder="说清你真正想要什么。可以写多行，写完点下面的「继续优化」或「跳过，直接优化」。"
+            placeholder={t('clarify.correctPlaceholder')}
             resize="vertical"
             rows={3}
             autoFocus
@@ -268,12 +270,12 @@ export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): 
               <div className={styles.fixedGroup}>
                 <Radio
                   checked={s.delegated}
-                  label="让 AI 自己判断"
+                  label={t('clarify.delegate')}
                   onChange={() => select(question.no, DELEGATE_VALUE)}
                 />
                 <Radio
                   checked={s.customChosen}
-                  label="写下自己的答案"
+                  label={t('clarify.ownAnswer')}
                   onChange={() => select(question.no, CUSTOM_VALUE)}
                 />
                 {s.customChosen && (
@@ -281,7 +283,7 @@ export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): 
                     className={styles.customInput}
                     value={s.custom}
                     onChange={(_, d) => update(question.no, { custom: d.value })}
-                    placeholder="在这里写下你的答案"
+                    placeholder={t('clarify.ownPlaceholder')}
                     autoFocus
                   />
                 )}
@@ -290,19 +292,19 @@ export function ClarifyPanel({ intent, questions, onSubmit, onCancel }: Props): 
           )
         })}
 
-        <Text className={styles.hint}>每题最多选一项，也可以不选。不选的题目不会写进提示词。</Text>
+        <Text className={styles.hint}>{t('clarify.hint')}</Text>
       </div>
 
       <div className={styles.footer}>
         <Button appearance="secondary" onClick={handleSkip}>
-          跳过，直接优化
+          {t('clarify.skip')}
         </Button>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button appearance="subtle" onClick={onCancel}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button appearance="primary" onClick={handleContinue}>
-            继续优化
+            {t('clarify.continue')}
           </Button>
         </div>
       </div>

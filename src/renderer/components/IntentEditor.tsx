@@ -24,6 +24,7 @@ import {
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { makeStyles, tokens } from '@fluentui/react-components'
 import { REF_PATTERN } from '../../shared/refs'
+import { useT } from '../i18n'
 
 const useStyles = makeStyles({
   root: {
@@ -183,10 +184,13 @@ export const IntentEditor = forwardRef<IntentEditorHandle, Props>(function Inten
   ref
 ): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   // 主题单独放一个 Compartment，切换时不用重建整个编辑器
   const themeCompartment = useRef(new Compartment())
+  // 占位文案跟随界面语言，切换语言时单独更新
+  const placeholderCompartment = useRef(new Compartment())
   // 用 ref 保存最新值，避免每次资料变化都重建编辑器
   const resourcesRef = useRef(resources)
   const onChangeRef = useRef(onChange)
@@ -234,7 +238,7 @@ export const IntentEditor = forwardRef<IntentEditorHandle, Props>(function Inten
           icons: false
         }),
         keymap.of([...completionKeymap, ...historyKeymap, ...defaultKeymap]),
-        placeholder('写下你的需求。输入 @ 可以引用资料。'),
+        placeholderCompartment.current.of(placeholder(t('editor.placeholder'))),
         EditorView.lineWrapping,
         themeCompartment.current.of(editorTheme(isDark)),
         refDecorationField,
@@ -259,6 +263,15 @@ export const IntentEditor = forwardRef<IntentEditorHandle, Props>(function Inten
     // 只在挂载时创建一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 界面语言变化后更新占位文案，不重建编辑器
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: placeholderCompartment.current.reconfigure(
+        placeholder(t('editor.placeholder'))
+      )
+    })
+  }, [t])
 
   // ---------- 把资料标签拖进来，在落点插入 @编号 ----------
   useEffect(() => {

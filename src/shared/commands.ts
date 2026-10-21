@@ -9,6 +9,8 @@
  * 不额外调用模型去修 —— 真正的保障是提示词里的"保留命令"规则。
  */
 
+import { translate, type UiLanguage } from './i18n'
+
 /**
  * 一个候选命令：`/` 前面必须是行首或空白、左括号、引号、反引号。
  *
@@ -81,17 +83,26 @@ export function extraCommands(source: string, result: string): string[] {
  * 拼一句给用户看的提示。没有问题返回 null。
  * 只提示，不阻止保存，也不额外调用模型。
  */
-export function buildCommandWarning(source: string, result: string): string | null {
+export function buildCommandWarning(
+  source: string,
+  result: string,
+  language: UiLanguage = 'zh'
+): string | null {
   const missing = missingCommands(source, result)
   const extra = extraCommands(source, result)
   if (missing.length === 0 && extra.length === 0) return null
 
+  const separator = language === 'en' ? ', ' : '、'
   const parts: string[] = []
   if (missing.length > 0) {
-    parts.push(`原文里的 ${missing.join('、')} 在结果里没有原样保留，请手动补上。`)
+    parts.push(
+      translate(language, 'command.missing', { tokens: missing.join(separator) })
+    )
   }
   if (extra.length > 0) {
-    parts.push(`结果里出现了原文没有的 ${extra.join('、')}，请确认是否需要。`)
+    parts.push(
+      translate(language, 'command.extra', { tokens: extra.join(separator) })
+    )
   }
   return parts.join(' ')
 }

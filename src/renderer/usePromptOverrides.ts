@@ -26,7 +26,13 @@ export function toOverrides(items: StyleItemView[]): PromptOverrides {
         overrides.blocks![item.id as BlockId] = item.text
       }
     } else if (item.kind === 'template') {
-      if (item.edited && (item.id === 'tidy' || item.id === 'title')) {
+      if (
+        item.edited &&
+        (item.id === 'tidy' ||
+          item.id === 'title' ||
+          item.id === 'translate' ||
+          item.id === 'expression')
+      ) {
         overrides.templates![item.id] = item.text
       }
     } else if (item.kind === 'style') {

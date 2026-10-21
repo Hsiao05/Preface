@@ -112,10 +112,10 @@ describe('全局缩放', () => {
 
   it('界面有加减按钮和恢复默认', () => {
     const source = read('src/renderer/components/settings/GeneralTab.tsx')
-    expect(source).toContain('界面缩放')
+    expect(source).toContain("t('settings.general.zoom')")
     expect(source).toContain('ZoomIn20Regular')
     expect(source).toContain('ZoomOut20Regular')
-    expect(source).toContain('恢复默认')
+    expect(source).toContain("t('settings.general.resetDefault')")
   })
 
   it('缩放值被限制在范围内', () => {
@@ -133,8 +133,8 @@ describe('试用区', () => {
   const source = read('src/renderer/components/settings/PromptsTab.tsx')
 
   it('有输入框和"试一下"按钮', () => {
-    expect(source).toContain('试用')
-    expect(source).toContain('试一下')
+    expect(source).toContain("t('settings.prompts.try')")
+    expect(source).toContain("t('settings.prompts.tryButton')")
     expect(source).toContain('tryRun')
   })
 
@@ -176,7 +176,7 @@ describe('改坏了的保护', () => {
 
   it('提示语指向设置页', () => {
     const source = read('src/renderer/useOptimize.ts')
-    expect(source).toContain('设置 → 提示词与风格')
+    expect(source).toContain("t('optimize.fallbackWarning')")
   })
 
   it('成功拿到结果时计数清零', () => {

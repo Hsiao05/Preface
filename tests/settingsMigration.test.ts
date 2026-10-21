@@ -14,8 +14,18 @@ import { join } from 'path'
  */
 
 let userDataDir: string
-let loadSettings: () => { shortcut: string }
-let saveSettings: (patch: Record<string, unknown>) => { shortcut: string }
+let loadSettings: () => {
+  shortcut: string
+  uiLanguage: 'zh' | 'en'
+  translationTarget: string
+  autoLaunch: boolean
+  zoom: number
+}
+let saveSettings: (patch: Record<string, unknown>) => {
+  shortcut: string
+  uiLanguage: 'zh' | 'en'
+  translationTarget: string
+}
 
 beforeEach(async () => {
   userDataDir = mkdtempSync(join(tmpdir(), 'preface-settings-'))
@@ -90,5 +100,39 @@ describe('快捷键迁移', () => {
     saveSettings({ shortcut: 'CommandOrControl+Alt+J' })
 
     expect(loadSettings().shortcut).toBe('CommandOrControl+Alt+J')
+  })
+})
+
+describe('语言设置的默认值', () => {
+  it('设置文件不存在时，界面语言是中文，翻译目标默认英语', () => {
+    const settings = loadSettings()
+    expect(settings.uiLanguage).toBe('zh')
+    expect(settings.translationTarget).toBe('en')
+  })
+
+  it('老设置文件没有语言字段时自动补齐', () => {
+    writeSettings({
+      shortcut: 'CommandOrControl+Alt+X',
+      autoLaunch: true,
+      zoom: 1.2
+    })
+
+    const settings = loadSettings()
+    expect(settings.uiLanguage).toBe('zh')
+    expect(settings.translationTarget).toBe('en')
+    expect(settings.autoLaunch).toBe(true)
+    expect(settings.zoom).toBe(1.2)
+  })
+
+  it('保存后界面语言和翻译目标立刻生效', () => {
+    saveSettings({ uiLanguage: 'en', translationTarget: 'ja' })
+
+    const settings = loadSettings()
+    expect(settings.uiLanguage).toBe('en')
+    expect(settings.translationTarget).toBe('ja')
+
+    const onDisk = JSON.parse(readFileSync(settingsFile(), 'utf-8'))
+    expect(onDisk.uiLanguage).toBe('en')
+    expect(onDisk.translationTarget).toBe('ja')
   })
 })

@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from '
 import { join, dirname } from 'path'
 import { z } from 'zod'
 import { log } from './logger'
+import { mainT } from './i18n'
 import {
   PROMPT_CONTENT_MAX,
   PROMPT_TITLE_MAX,
@@ -71,19 +72,19 @@ function readFile(): PromptLibraryFile {
   try {
     json = JSON.parse(readFileSync(file, 'utf-8'))
   } catch {
-    throw new PromptLibraryError('Prompt 库文件不是合法的 JSON，已保留原文件。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorCorrupt'))
   }
 
   const version = (json as { version?: unknown } | null)?.version
   if (version !== SCHEMA_VERSION) {
     throw new PromptLibraryError(
-      `Prompt 库文件版本（${String(version)}）不是本程序支持的版本，已保留原文件。`
+      mainT('promptLibrary.errorVersion', { version: String(version) })
     )
   }
 
   const parsed = fileSchema.safeParse(json)
   if (!parsed.success) {
-    throw new PromptLibraryError('Prompt 库文件内容格式不对，已保留原文件。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorSchema'))
   }
   return parsed.data as PromptLibraryFile
 }
@@ -113,7 +114,7 @@ function persist(next: PromptLibraryFile): PromptLibraryFile {
     renameSync(temp, file)
   } catch (error) {
     log(`保存 Prompt 库失败: ${String(error)}`)
-    throw new PromptLibraryError('保存 Prompt 库失败，请检查磁盘空间或文件权限。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorSave'))
   }
   cache = next
   return next
@@ -132,20 +133,24 @@ function enqueue<T>(task: () => T): Promise<T> {
 /** 校验 id：只接受简单的可见字符 */
 function assertId(id: unknown): asserts id is string {
   if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
-    throw new PromptLibraryError('Prompt 的编号不对。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorId'))
   }
 }
 
 /** 校验标题与正文的上限。超限明确报错，**不截断**保存。 */
 function assertLimits(title: string, content: string): void {
   if (Array.from(title).length > PROMPT_TITLE_MAX) {
-    throw new PromptLibraryError(`标题不能超过 ${PROMPT_TITLE_MAX} 字。`)
+    throw new PromptLibraryError(
+      mainT('promptLibrary.errorTitleTooLong', { max: PROMPT_TITLE_MAX })
+    )
   }
   if (content.trim() === '') {
-    throw new PromptLibraryError('正文不能为空。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorContentEmpty'))
   }
   if (Array.from(content).length > PROMPT_CONTENT_MAX) {
-    throw new PromptLibraryError(`单条 Prompt 正文不能超过 ${PROMPT_CONTENT_MAX} 字。`)
+    throw new PromptLibraryError(
+      mainT('promptLibrary.errorContentTooLong', { max: PROMPT_CONTENT_MAX })
+    )
   }
 }
 
@@ -159,7 +164,7 @@ export interface SavePromptInput {
 function saveSync(input: SavePromptInput): PromptLibraryFile {
   assertId(input.id)
   if (typeof input.title !== 'string' || typeof input.content !== 'string') {
-    throw new PromptLibraryError('标题或正文格式不对。')
+    throw new PromptLibraryError(mainT('promptLibrary.errorFields'))
   }
 
   const title = normalizePromptTitle(input.title)

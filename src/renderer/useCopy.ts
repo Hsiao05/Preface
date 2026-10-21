@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react'
 import { useStore } from './store'
 import { assemblePrompt } from '../shared/assemble'
 import { preCopyCheck, type PreCopyIssue } from '../shared/preCopyCheck'
+import { useT, useUiLanguage } from './i18n'
+import { formatNumber } from './format'
 import type { FileResource } from '../shared/types'
 
 interface CopyState {
@@ -22,6 +24,9 @@ export function useCopy(): {
   cancelCopy: () => void
   closeUploadList: () => void
 } {
+  const t = useT()
+  const language = useUiLanguage()
+  const separator = language === 'en' ? ', ' : '、'
   const [copyState, setCopyState] = useState<CopyState>({
     issues: [],
     pendingUploads: [],
@@ -61,11 +66,26 @@ export function useCopy(): {
       const fileCount = draft.files.filter((f) => !excluded.has(f.id)).length
       const corpusCount = draft.corpora.filter((c) => !excluded.has(c.id)).length
       const parts: string[] = []
-      if (fileCount > 0) parts.push(`${fileCount} 个文件`)
-      if (corpusCount > 0) parts.push(`${corpusCount} 个语料块`)
+      if (fileCount > 0) {
+        parts.push(
+          fileCount === 1
+            ? t('copy.filesOne')
+            : t('copy.filesMany', { count: formatNumber(fileCount, language) })
+        )
+      }
+      if (corpusCount > 0) {
+        parts.push(
+          corpusCount === 1
+            ? t('copy.corporaOne')
+            : t('copy.corporaMany', { count: formatNumber(corpusCount, language) })
+        )
+      }
       state.setNotice({
         kind: 'success',
-        text: parts.length > 0 ? `已复制（含 ${parts.join('、')}）` : '已复制'
+        text:
+          parts.length > 0
+            ? t('copy.doneWith', { items: parts.join(separator) })
+            : t('copy.done')
       })
 
       // 网页端：弹出"还需要上传的文件"清单
@@ -77,7 +97,7 @@ export function useCopy(): {
         })
       }
     },
-    []
+    [language, separator, t]
   )
 
   /** 第一步：检查 */
@@ -87,7 +107,7 @@ export function useCopy(): {
 
     const body = activeTab === 'result' ? (draft.result?.text ?? '') : draft.intentText
     if (!body.trim()) {
-      state.setNotice({ kind: 'warning', text: '没有可复制的内容。' })
+      state.setNotice({ kind: 'warning', text: t('copy.empty') })
       return
     }
 
@@ -100,14 +120,17 @@ export function useCopy(): {
     state.setMissingFiles(missingIds)
 
     const settings = await window.preface.getSettings()
-    const { issues } = preCopyCheck({
-      files: draft.files,
-      corpora: draft.corpora,
-      body,
-      target: draft.target,
-      missingFileIds: missingIds,
-      lengthWarnThreshold: settings.lengthWarnThreshold
-    })
+    const { issues } = preCopyCheck(
+      {
+        files: draft.files,
+        corpora: draft.corpora,
+        body,
+        target: draft.target,
+        missingFileIds: missingIds,
+        lengthWarnThreshold: settings.lengthWarnThreshold
+      },
+      language
+    )
 
     if (issues.length === 0) {
       await doCopy(new Set())
@@ -115,7 +138,7 @@ export function useCopy(): {
     }
 
     setCopyState({ issues, pendingUploads: [], showUploadList: false })
-  }, [doCopy])
+  }, [doCopy, t, language])
 
   /** 用户在确认框里选了"仍然复制" */
   const confirmCopy = useCallback(
@@ -126,19 +149,22 @@ export function useCopy(): {
 
       const excluded = new Set<string>()
       if (!includeUnreferenced) {
-        const { unreferencedIds } = preCopyCheck({
-          files: draft.files,
-          corpora: draft.corpora,
-          body,
-          target: draft.target
-        })
+        const { unreferencedIds } = preCopyCheck(
+          {
+            files: draft.files,
+            corpora: draft.corpora,
+            body,
+            target: draft.target
+          },
+          language
+        )
         for (const id of unreferencedIds) excluded.add(id)
       }
 
       setCopyState({ issues: [], pendingUploads: [], showUploadList: false })
       await doCopy(excluded)
     },
-    [doCopy]
+    [doCopy, language]
   )
 
   const cancelCopy = useCallback(() => {

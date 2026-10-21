@@ -1,4 +1,5 @@
 import { formatTokenCount } from './estimateTokens'
+import { translate, type UiLanguage } from './i18n'
 
 /**
  * 结果区上方状态条的文字。
@@ -24,23 +25,29 @@ export interface StatusTextInput {
   showTokenUsage?: boolean
 }
 
-export function buildStatusText(input: StatusTextInput): string | null {
+export function buildStatusText(
+  input: StatusTextInput,
+  language: UiLanguage = 'zh'
+): string | null {
   const { resolvedMode, mode, usage, sawReasoning, showTokenUsage = true } = input
   const parts: string[] = []
 
   if (resolvedMode) {
-    const label = resolvedMode === 'simple' ? '简单模式' : 'Markdown 模式'
-    const auto = mode === 'auto' ? '（自动判断）' : ''
+    const label =
+      resolvedMode === 'simple'
+        ? translate(language, 'status.simpleMode')
+        : translate(language, 'status.markdownMode')
+    const auto = mode === 'auto' ? translate(language, 'status.auto') : ''
     parts.push(`${label}${auto}`)
   }
 
   if (usage && showTokenUsage) {
     const total = (usage.input ?? 0) + (usage.output ?? 0)
-    parts.push(`本次约 ${formatTokenCount(total)} tokens`)
+    parts.push(translate(language, 'status.tokens', { count: formatTokenCount(total) }))
   }
 
   if (sawReasoning) {
-    parts.push('模型带推理过程，消耗会增加')
+    parts.push(translate(language, 'status.reasoning'))
   }
 
   return parts.length > 0 ? parts.join(' · ') : null

@@ -8,9 +8,11 @@ import {
   getMainWindow,
   hideWindow,
   persistWindowState,
+  refreshTrayLanguage,
   setAlwaysOnTop
 } from './window'
 import { getLogFilePath, log, setContentLoggingEnabled } from './logger'
+import { mainT, getUiLanguage } from './i18n'
 import { pickFiles, showInFolder, startDrag, statFiles, toFileResources } from './files'
 import {
   archiveDraft,
@@ -72,6 +74,7 @@ import {
   doListModels,
   doTestConnection,
   startRun,
+  CALL_SPECS,
   type CallKind
 } from './llm'
 import type { ChatMessage } from './llm/client'
@@ -109,6 +112,11 @@ export function setupIpc(): void {
     if (patch.debugLog !== undefined) setContentLoggingEnabled(next.debugLog)
     if (patch.autoLaunch !== undefined) applyAutoLaunch(next.autoLaunch)
 
+    // 界面语言变了：窗口标题和托盘菜单要跟着换
+    if (patch.uiLanguage !== undefined && next.uiLanguage !== before.uiLanguage) {
+      refreshTrayLanguage()
+    }
+
     // 保留时长变短时，立刻按新规则清理一次
     if (patch.snapshotRetentionMinutes !== undefined) {
       pruneByRetention(next.snapshotRetentionMinutes)
@@ -126,7 +134,9 @@ export function setupIpc(): void {
 
   // ---------- 应用 ----------
   ipcMain.handle('app:version', () => app.getVersion())
-  ipcMain.handle('app:shortcut-label', (_event, accelerator: string) => shortcutLabel(accelerator))
+  ipcMain.handle('app:shortcut-label', (_event, accelerator: string) =>
+    shortcutLabel(accelerator, getUiLanguage())
+  )
 
   // ---------- 草稿 ----------
   ipcMain.handle('draft:load', () => loadCurrentDraft())
@@ -262,6 +272,9 @@ export function setupIpc(): void {
       // 频道由界面生成，这样它能先注册监听再发起调用，不会漏掉开头的内容
       channel?: string
     ) => {
+      if (!Object.prototype.hasOwnProperty.call(CALL_SPECS, kind)) {
+        throw new Error(mainT('error.unknownCallKind', { kind: String(kind) }))
+      }
       const target = channel ?? `llm:event:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const { requestId } = await startRun({ kind, messages, sourceText }, target)
       return { requestId, channel: target }
@@ -317,7 +330,7 @@ export function setupIpc(): void {
         ? error.message
         : error instanceof Error
           ? error.message
-          : 'Prompt 库操作失败。'
+          : mainT('promptLibrary.errorFailed')
     log(`Prompt 库操作失败: ${message}`)
     return { ok: false, error: message, items: [] }
   }
@@ -394,7 +407,10 @@ export function setupIpc(): void {
     if (!apiKey) {
       return {
         ok: false,
-        error: { message: '还没有填语音 API Key', suggestion: '请到「设置 → 语音」里填写。' }
+        error: {
+          message: mainT('speech.missingKey'),
+          suggestion: mainT('speech.missingKeyHint')
+        }
       }
     }
 
@@ -422,7 +438,7 @@ export function setupIpc(): void {
     }
     return {
       ok: false,
-      error: { message: '识别失败', suggestion: '请检查「设置 → 语音」里的配置。' }
+      error: { message: mainT('speech.failed'), suggestion: mainT('speech.failedHint') }
     }
   }
 
@@ -457,7 +473,10 @@ export function setupIpc(): void {
     if (typeof path !== 'string' || !path) {
       return {
         ok: false,
-        error: { message: '文件路径不对', suggestion: '请重新添加这个文件后再试。' }
+        error: {
+          message: mainT('speech.invalidPath'),
+          suggestion: mainT('speech.invalidPathHint')
+        }
       }
     }
 
@@ -497,7 +516,7 @@ export function setupIpc(): void {
       const renamed = items.map((item) => {
         if (!existingIds.has(item.id)) return item
         const suffix = Date.now().toString(36).slice(-4)
-        return { ...item, id: `${item.id}-${suffix}`, name: `${item.name}（导入）`, builtin: false, builtinVersion: 0 }
+        return { ...item, id: `${item.id}-${suffix}`, name: mainT('styles.importedName', { name: item.name }), builtin: false, builtinVersion: 0 }
       })
       return replaceAll([...existing, ...renamed])
     }

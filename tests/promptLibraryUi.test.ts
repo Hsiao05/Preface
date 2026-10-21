@@ -29,7 +29,7 @@ describe('入口位置', () => {
 
   it('运行中也能打开库，只读查看和设置下一次选择', () => {
     const start = bottomBar.indexOf('icon={<Library20Regular />}')
-    const libraryButton = bottomBar.slice(start, bottomBar.indexOf('我的Prompt库', start))
+    const libraryButton = bottomBar.slice(start, bottomBar.indexOf("t('bottomBar.library')", start))
     expect(libraryButton).not.toContain('disabled={busy}')
   })
 
@@ -49,12 +49,12 @@ describe('Prompt 状态的位置', () => {
     expect(editorArea).toContain('promptContext')
     expect(editorArea).toContain('styles.promptSlot')
     expect(app).toContain('<PromptContextBar')
-    expect(contextBar).toContain('优化时使用：')
+    expect(contextBar).toContain("t('promptContext.thisRun')")
   })
 
   it('完整模板说明只保留一处，不再和模式开关并排', () => {
     expect(bottomBar).not.toContain('本轮按模板格式输出')
-    expect(contextBar).toContain('按模板正文格式输出')
+    expect(contextBar).toContain("t('promptContext.helpTemplateMode')")
     expect(bottomBar).toContain('aria-describedby="mode-hint"')
   })
 })

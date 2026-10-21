@@ -34,9 +34,9 @@ describe('顶栏按钮不换行', () => {
   })
 })
 
-describe('默认窗口宽度足够放下顶栏', () => {
-  it('默认宽度是 880（700 会挤压按钮）', async () => {
+describe('默认窗口宽度', () => {
+  it('默认宽度是 850', async () => {
     const source = readFileSync(join(root, 'src/main/windowState.ts'), 'utf-8')
-    expect(source).toContain('export const DEFAULT_WIDTH = 880')
+    expect(source).toContain('export const DEFAULT_WIDTH = 850')
   })
 })

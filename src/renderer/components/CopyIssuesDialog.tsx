@@ -13,6 +13,7 @@ import {
   tokens
 } from '@fluentui/react-components'
 import type { PreCopyIssue } from '../../shared/preCopyCheck'
+import { useT } from '../i18n'
 
 const useStyles = makeStyles({
   content: {
@@ -45,6 +46,7 @@ interface Props {
 
 export function CopyIssuesDialog({ open, issues, onCancel, onConfirm }: Props): JSX.Element {
   const styles = useStyles()
+  const t = useT()
   // 未被引用的资料要不要附带，默认附带
   const [includeUnreferenced, setIncludeUnreferenced] = useState('yes')
 
@@ -52,7 +54,7 @@ export function CopyIssuesDialog({ open, issues, onCancel, onConfirm }: Props): 
     <Dialog open={open} onOpenChange={(_, data) => !data.open && onCancel()}>
       <DialogSurface>
         <DialogBody>
-          <DialogTitle>复制前请确认</DialogTitle>
+          <DialogTitle>{t('copyIssues.title')}</DialogTitle>
           <DialogContent className={styles.content}>
             {issues.map((issue, index) => (
               <div key={index} className={styles.issue}>
@@ -64,8 +66,8 @@ export function CopyIssuesDialog({ open, issues, onCancel, onConfirm }: Props): 
                     value={includeUnreferenced}
                     onChange={(_, data) => setIncludeUnreferenced(data.value)}
                   >
-                    <Radio value="yes" label="附带，标注为背景资料" />
-                    <Radio value="no" label="不附带，本次略去" />
+                    <Radio value="yes" label={t('copyIssues.include')} />
+                    <Radio value="no" label={t('copyIssues.exclude')} />
                   </RadioGroup>
                 )}
               </div>
@@ -73,13 +75,13 @@ export function CopyIssuesDialog({ open, issues, onCancel, onConfirm }: Props): 
           </DialogContent>
           <DialogActions>
             <Button appearance="secondary" onClick={onCancel}>
-              返回修改
+              {t('copyIssues.back')}
             </Button>
             <Button
               appearance="primary"
               onClick={() => onConfirm(includeUnreferenced === 'yes')}
             >
-              仍然复制
+              {t('copyIssues.confirm')}
             </Button>
           </DialogActions>
         </DialogBody>

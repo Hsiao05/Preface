@@ -42,6 +42,18 @@ export function stripMarkdown(text: string): string {
 }
 
 /**
+ * 只去掉包裹**整段结果**的一层 Markdown 代码围栏，保留正文里的 Markdown。
+ *
+ * 翻译和优化表达要求模型直接输出正文，但个别模型仍会包一层围栏。
+ * 这里不剥离正文内的标题、列表等符号。
+ */
+export function stripOuterCodeFence(text: string): string {
+  const trimmed = text.trim()
+  const match = trimmed.match(/^```[^\n]*\n([\s\S]*?)\n```$/)
+  return match ? match[1].trim() : trimmed
+}
+
+/**
  * 去掉结果开头可能出现的开场白，以及包裹全文的代码块标记。
  * 例如"以下是优化后的提示词："这样的句子。
  */

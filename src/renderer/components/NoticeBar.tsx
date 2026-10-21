@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { MessageBar, MessageBarBody, MessageBarActions, Button, makeStyles } from '@fluentui/react-components'
 import { Dismiss16Regular } from '@fluentui/react-icons'
 import { useStore } from '../store'
+import { useT } from '../i18n'
 
 const useStyles = makeStyles({
   root: {
@@ -11,6 +12,7 @@ const useStyles = makeStyles({
 
 export function NoticeBar(): JSX.Element | null {
   const styles = useStyles()
+  const t = useT()
   const { notice, setNotice } = useStore()
 
   if (!notice) return null
@@ -26,7 +28,7 @@ export function NoticeBar(): JSX.Element | null {
             appearance="transparent"
             icon={<Dismiss16Regular />}
             onClick={() => setNotice(null)}
-            aria-label="关闭提示"
+            aria-label={t('common.dismiss')}
           />
         }
       />

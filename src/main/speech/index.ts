@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { log } from '../logger'
+import { mainT } from '../i18n'
 import {
   DEFAULT_MAX_SECONDS,
   DEFAULT_SPEECH_PRESET,
@@ -23,7 +24,7 @@ import { transcribeViaChatAudio } from './chatAudio'
 
 /** 在线 API 引擎。按 apiType 分派到两种请求格式。 */
 const onlineApiEngine: SpeechEngine = {
-  name: '在线 API',
+  name: 'Online API',
   async transcribe(audio, { config, apiKey, signal, mime, filename }) {
     const options = { config, apiKey, signal, mime, filename }
     if (config.apiType === 'chat-audio') {
@@ -104,15 +105,15 @@ export async function transcribe(input: TranscribeInput): Promise<string> {
     return text
   } catch (error) {
     if (timedOut) {
-      throw new SpeechError('识别超时', '服务商响应太慢，可以稍后再试。')
+      throw new SpeechError(mainT('speech.timeout'), mainT('speech.timeoutHint'))
     }
     if (controller.signal.aborted) {
-      throw new SpeechError('识别已取消')
+      throw new SpeechError(mainT('speech.cancelled'))
     }
     if (error instanceof SpeechError) {
       throw error
     }
-    throw new SpeechError('识别失败', '请检查设置里的语音配置。')
+    throw new SpeechError(mainT('speech.failed'), mainT('speech.genericHint'))
   } finally {
     clearTimeout(timer)
     if (activeController === controller) activeController = null

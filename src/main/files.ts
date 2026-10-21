@@ -2,6 +2,7 @@ import { dialog, shell, type BrowserWindow } from 'electron'
 import type { FileResource } from '../shared/types'
 import { allocateIds } from '../shared/allocateId'
 import { statFile } from '../shared/fileMeta'
+import { mainT } from './i18n'
 
 /**
  * 文件模块里依赖 Electron 的部分。
@@ -14,9 +15,9 @@ import { statFile } from '../shared/fileMeta'
 /** 打开文件选择框，返回选中的路径 */
 export async function pickFiles(win: BrowserWindow | null): Promise<string[]> {
   const options: Electron.OpenDialogOptions = {
-    title: '选择要附带的文件',
+    title: mainT('files.pickTitle'),
     properties: ['openFile', 'multiSelections'],
-    buttonLabel: '添加'
+    buttonLabel: mainT('files.pickButton')
   }
 
   const result = win
