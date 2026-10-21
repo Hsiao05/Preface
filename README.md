@@ -1,5 +1,7 @@
 # 「序 · Preface」for Windows
 
+[English](README.en.md) | 简体中文
+
 **把零散的想法、文件和大段资料，整理成一段给 AI Agent 的清晰提示词。**
 
 
@@ -648,7 +650,7 @@
 <details>
 <summary><b>提示“还没有配置模型”</b></summary>
 
-去「设置 → 模型」添加一套配置，填好 Base URL 和 API Key。具体步骤见 [快速上手](#接上一个模型以-deepseek-为例)。
+去「设置 → 模型」添加一套配置，填好 Base URL 和 API Key。具体步骤见 [快速上手](#接一个模型以-deepseek-为例)。
 
 </details>
 
